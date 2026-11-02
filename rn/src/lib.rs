@@ -30,6 +30,18 @@ pub use reconciler::{Changeset, Operation, Reconciler};
 pub use renderer::PlatformRenderer;
 pub use rn_core::NodeId;
 
+/// Platform backend bindings. Enabled by the `macos`, `windows`, or `linux`
+/// feature flag. Only the renderer type is re-exported; no `objc2`/`windows`/
+/// `gtk4` symbols leak through this module (US3 / FR-007).
+pub mod backend {
+    #[cfg(feature = "macos")]
+    pub use rn_macos::MacosRenderer;
+    #[cfg(feature = "windows")]
+    pub use rn_windows::WindowsRenderer;
+    #[cfg(feature = "linux")]
+    pub use rn_linux::LinuxRenderer;
+}
+
 // ---------------------------------------------------------------------------
 // Builder entry points (contracts/public-api.md)
 // ---------------------------------------------------------------------------
@@ -171,11 +183,77 @@ pub fn render<R: PlatformRenderer>(renderer: &mut R, tree: ComponentTree) -> Res
     Ok(())
 }
 
+/// Re-reconcile `tree` and apply via the installed backend bridge. Used from
+/// inside a running event loop (e.g. the `set_tick` closure in the counter
+/// example) where the host no longer has `&mut renderer` in scope. The bridge
+/// is installed by `rn::run` when the backend starts.
+pub fn rerender(tree: ComponentTree) -> Result<(), RnError> {
+    thread::MainThreadGuard::check()?;
+    let start = Instant::now();
+    let changeset = {
+        let Ok(mut rec) = reconciler_cell().lock() else {
+            return Err(RnError::Render(RenderError::OsError(
+                "reconciler mutex poisoned".to_string(),
+            )));
+        };
+        rec.reconcile(tree).map_err(RnError::Reconcile)?
+    };
+    log::trace!(
+        "rn::rerender: reconcile took {:?}, {} ops",
+        start.elapsed(),
+        changeset.operations.len()
+    );
+    log::debug!("rn::rerender: {}", changeset.summary());
+    rn_core::apply_via_bridge(changeset).map_err(RnError::Render)?;
+    Ok(())
+}
+
 /// Start the platform event loop. Must be called from the main thread.
 pub fn run<R: PlatformRenderer>(renderer: &mut R) -> Result<(), RnError> {
     thread::MainThreadGuard::check()?;
+    // Hand the framework's event dispatcher to backends via rn-core so they
+    // can route native events without depending on `rn` (FR-013 bridge).
+    rn_core::set_dispatch_bridge(dispatch_handler_trampoline);
     renderer.run_event_loop().map_err(RnError::Render)?;
     Ok(())
+}
+
+fn dispatch_handler_trampoline(event: Event) {
+    let _ = dispatch_handler(event);
+}
+
+// ---------------------------------------------------------------------------
+// Tick hook — host apps install a closure here; the backend calls
+// `rn_core::tick()` from its event-loop timer, which routes to this closure.
+// Used by examples to drain `update_sender` messages each tick (FR-011,
+// coalescing per analyze G1).
+// ---------------------------------------------------------------------------
+
+type TickClosure = Box<dyn Fn() + Send + Sync + 'static>;
+
+fn tick_closure() -> &'static Mutex<Option<TickClosure>> {
+    static TICK: OnceLock<Mutex<Option<TickClosure>>> = OnceLock::new();
+    TICK.get_or_init(|| Mutex::new(None))
+}
+
+/// Install a per-tick closure invoked once per event-loop tick on the main
+/// thread. Used by examples to drain pending `update_sender` messages and
+/// trigger a re-render.
+pub fn set_tick(f: impl Fn() + Send + Sync + 'static) {
+    if let Ok(mut slot) = tick_closure().lock() {
+        *slot = Some(Box::new(f));
+    }
+    rn_core::set_tick_bridge(tick_trampoline);
+}
+
+fn tick_trampoline() {
+    let Ok(slot) = tick_closure().lock() else {
+        return;
+    };
+    if let Some(f) = slot.as_ref() {
+        let f = f.as_ref();
+        let _ = catch_unwind(AssertUnwindSafe(f));
+    }
 }
 
 // ---------------------------------------------------------------------------

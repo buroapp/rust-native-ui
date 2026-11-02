@@ -27,8 +27,36 @@ env_logger = "0.11"
 criterion = "0.5"
 # Platform backends
 objc2 = "0.5"
-objc2-app-kit = "0.2"
-objc2-foundation = "0.2"
+objc2-app-kit = { version = "0.2", features = [
+    "NSApplication",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSWindow",
+    "NSView",
+    "NSControl",
+    "NSTextField",
+    "NSButton",
+    "NSButtonCell",
+    "NSGraphics",
+    "NSEvent",
+    "NSColor",
+    "NSText",
+    "NSCell",
+] }
+objc2-foundation = { version = "0.2", features = [
+    "NSString",
+    "NSObject",
+    "NSGeometry",
+    "NSNotification",
+    "NSThread",
+    "NSTimer",
+    "NSDate",
+    "NSRunLoop",
+    "NSArray",
+    "NSDictionary",
+    "NSEnumerator",
+    "NSValue",
+] }
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",

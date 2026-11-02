@@ -10,6 +10,7 @@ description = "Internal: macOS AppKit backend for Rust Native"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 rn-core = { path = "../rn-core", version = "0.1.0" }
+rn-layout = { path = "../rn-layout", version = "0.1.0" }
 objc2 = { workspace = true }
 objc2-app-kit = { workspace = true }
 objc2-foundation = { workspace = true }

@@ -8,6 +8,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 
 // ---------------------------------------------------------------------------
 // NodeId
@@ -212,4 +213,84 @@ impl std::error::Error for RenderError {}
 pub trait PlatformRenderer {
     fn apply(&mut self, changeset: Changeset) -> Result<(), RenderError>;
     fn run_event_loop(&mut self) -> Result<(), RenderError>;
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch bridge — lets a backend crate (which depends only on rn-core) hand
+// native-UI events to the top-level `rn` crate's handler registry without a
+// circular dependency. `rn` registers its `dispatch_handler` at startup via
+// `set_dispatch_bridge`; backends call `dispatch_event` on each native event.
+// ---------------------------------------------------------------------------
+
+type DispatchFn = fn(Event);
+
+static DISPATCH: OnceLock<DispatchFn> = OnceLock::new();
+
+/// Install the event dispatcher. Called once by `rn` during initialisation;
+/// idempotent — the first registered function wins.
+pub fn set_dispatch_bridge(f: DispatchFn) {
+    let _ = DISPATCH.set(f);
+}
+
+/// Backends call this to hand a native event to the framework. If no bridge
+/// has been installed yet (e.g. tests without `rn`), the event is dropped.
+pub fn dispatch_event(event: Event) {
+    if let Some(f) = DISPATCH.get() {
+        f(event);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tick bridge — lets a backend crate drain the host's pending state updates
+// from `rn::drain_updates()` once per event-loop tick without depending on
+// `rn`. `rn::run` installs a trampoline that calls back into the host closure.
+// ---------------------------------------------------------------------------
+
+type TickFn = fn();
+
+static TICK: OnceLock<TickFn> = OnceLock::new();
+
+/// Install the per-tick trampoline. Idempotent.
+pub fn set_tick_bridge(f: TickFn) {
+    let _ = TICK.set(f);
+}
+
+/// Backends invoke this from their event loop timer; a no-op if nothing is
+/// registered yet.
+pub fn tick() {
+    if let Some(f) = TICK.get() {
+        f();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Apply bridge — the backend owns the renderer's native handles behind
+// `&mut self`, but re-renders can originate from the event loop tick where
+// the renderer is already borrowed by the event-loop driver. The backend
+// installs an `ApplyBridge` that funnels a `Changeset` back into its internal
+// state through interior mutability; `rn::rerender` uses this to apply
+// changesets produced by the per-tick view function.
+// ---------------------------------------------------------------------------
+
+pub trait ApplyBridge: Send + Sync {
+    fn apply(&self, changeset: Changeset) -> Result<(), RenderError>;
+}
+
+static APPLY: OnceLock<Box<dyn ApplyBridge>> = OnceLock::new();
+
+/// Install the apply bridge. Idempotent — first registration wins.
+pub fn set_apply_bridge(bridge: Box<dyn ApplyBridge>) {
+    let _ = APPLY.set(bridge);
+}
+
+/// Framework-internal: apply a changeset via whatever bridge the backend
+/// installed. Returns `Err(RenderError::OsError(..))` if no bridge is
+/// installed.
+pub fn apply_via_bridge(changeset: Changeset) -> Result<(), RenderError> {
+    match APPLY.get() {
+        Some(bridge) => bridge.apply(changeset),
+        None => Err(RenderError::OsError(
+            "no apply bridge installed (call rn::run first)".to_string(),
+        )),
+    }
 }

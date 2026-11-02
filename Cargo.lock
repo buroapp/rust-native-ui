@@ -214,6 +214,7 @@ name = "counter"
 version = "0.0.0"
 dependencies = [
  "env_logger",
+ "log",
  "rn",
 ]
 
@@ -713,6 +714,7 @@ name = "hello-world"
 version = "0.0.0"
 dependencies = [
  "env_logger",
+ "log",
  "rn",
 ]
 
@@ -1163,6 +1165,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "rn-core",
+ "rn-layout",
 ]
 
 [[package]]

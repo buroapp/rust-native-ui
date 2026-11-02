@@ -22,8 +22,9 @@ The exact same source compiles on all three platforms.
 ### Setup
 
 ```bash
-cd examples/hello-world
-cargo run --features rn/<platform>   # platform = macos | windows | linux
+cargo run -p hello-world --features macos   # on macOS
+# Windows and Linux backends are compile-only scaffolds in v0.1
+# (see docs/backend-status.md).
 ```
 
 ### Expected Outcome
@@ -56,8 +57,7 @@ are recreated.
 ### Setup
 
 ```bash
-cd examples/counter
-cargo run --features rn/<platform>
+cargo run -p counter --features macos
 ```
 
 ### Expected Outcome
@@ -101,6 +101,26 @@ cargo tree -p hello-world --edges normal
   consumer crate itself.
 - They appear only as transitive deps of `rn-macos` / `rn-windows` / `rn-linux`
   which are internal to the framework workspace.
+
+### Measured result (2026-11-02)
+
+`cargo tree -p hello-world --edges normal` (no features):
+
+```
+hello-world v0.0.0
+├── env_logger v0.11
+├── log v0.4
+└── rn v0.1
+    ├── crossbeam-channel v0.5
+    ├── log v0.4
+    ├── rn-core v0.1
+    └── rn-layout v0.1 (-> taffy v0.5)
+```
+
+No `objc2`, `windows`, or `gtk4` entries. Same tree with `--features macos`
+adds `rn-macos` under `rn`, and `objc2` / `objc2-app-kit` / `objc2-foundation`
+appear only as transitive deps of `rn-macos` — never as direct children of
+`hello-world`. ✅
 
 ---
 

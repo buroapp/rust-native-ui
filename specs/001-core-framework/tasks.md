@@ -84,17 +84,17 @@ x86_64-pc-windows-msvc` and `cargo check --target x86_64-unknown-linux-gnu` pass
 
 ### Implementation for User Story 1
 
-- [ ] T029 [US1] Implement `MacosRenderer::new() -> Result<Self, RenderError>` in `rn-macos/src/renderer.rs` — initialise `NSApplication`, store main-thread marker, log init via `log::debug!`
-- [ ] T030 [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::Window` — create `NSWindow` via `objc2-app-kit` in `rn-macos/src/renderer.rs`; store handle in internal `node_map: HashMap<NodeId, NativeHandle>`
-- [ ] T031 [P] [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::Label` — create `NSTextField` (non-editable) in `rn-macos/src/renderer.rs`
-- [ ] T032 [P] [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::Button` — create `NSButton` with click action bridged into event channel in `rn-macos/src/renderer.rs`
-- [ ] T033 [P] [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::TextInput` — create `NSTextField` (editable) in `rn-macos/src/renderer.rs`
-- [ ] T034 [P] [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::LayoutContainer` — create `NSView` container, invoke `rn-layout` to get rects, set subview frames in `rn-macos/src/renderer.rs`
-- [ ] T035 [US1] Implement `MacosRenderer::run_event_loop()` — start `NSApplication::run()` main loop, drain `crossbeam-channel` receiver each tick, dispatch events via `rn::dispatch_handler` (panic-safe) in `rn-macos/src/renderer.rs`
+- [X] T029 [US1] Implement `MacosRenderer::new() -> Result<Self, RenderError>` in `rn-macos/src/renderer.rs` — initialise `NSApplication`, store main-thread marker, log init via `log::debug!`
+- [X] T030 [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::Window` — create `NSWindow` via `objc2-app-kit` in `rn-macos/src/renderer.rs`; store handle in internal `node_map: HashMap<NodeId, NativeHandle>`
+- [X] T031 [P] [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::Label` — create `NSTextField` (non-editable) in `rn-macos/src/renderer.rs`
+- [X] T032 [P] [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::Button` — create `NSButton` with click action bridged into event channel in `rn-macos/src/renderer.rs`
+- [X] T033 [P] [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::TextInput` — create `NSTextField` (editable) in `rn-macos/src/renderer.rs`
+- [X] T034 [P] [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::LayoutContainer` — create `NSView` container, invoke `rn-layout` to get rects, set subview frames in `rn-macos/src/renderer.rs`
+- [X] T035 [US1] Implement `MacosRenderer::run_event_loop()` — start `NSApplication::run()` main loop, drain `crossbeam-channel` receiver each tick, dispatch events via `rn::dispatch_handler` (panic-safe) in `rn-macos/src/renderer.rs`
 - [X] T036 [P] [US1] Stub `WindowsRenderer` — implement `PlatformRenderer` trait with no-op `apply()` returning `Ok(())` and `run_event_loop()` returning `Err(RenderError::OsError("windows backend not implemented in v0.1"))` in `rn-windows/src/renderer.rs`
 - [X] T037 [P] [US1] Stub `LinuxRenderer` — implement `PlatformRenderer` trait with no-op `apply()` returning `Ok(())` and `run_event_loop()` returning `Err(RenderError::OsError("linux backend not implemented in v0.1"))` in `rn-linux/src/renderer.rs`
-- [ ] T038 [US1] Implement `examples/hello-world/src/main.rs` — `env_logger::init()`, construct `ComponentTree` with Window > VStack > [Label("Hello, World!"), Button("Click me")]; call `rn::render` then `rn::run`
-- [ ] T039 [US1] Verify `cargo run --example hello-world --features rn/macos` produces a visible native macOS window; inspect with Accessibility Inspector; confirm AXWindow + AXStaticText + AXButton roles
+- [X] T038 [US1] Implement `examples/hello-world/src/main.rs` — `env_logger::init()`, construct `ComponentTree` with Window > VStack > [Label("Hello, World!"), Button("Click me")]; call `rn::render` then `rn::run`
+- [X] T039 [US1] Verify `cargo run --example hello-world --features rn/macos` produces a visible native macOS window; inspect with Accessibility Inspector; confirm AXWindow + AXStaticText + AXButton roles
 
 **Checkpoint**: US1 fully functional and independently testable on macOS. Windows and
 Linux scaffolds compile.
@@ -113,11 +113,11 @@ headlessly (no display server).
 ### Implementation for User Story 2
 
 - [X] T040 [US2] Implement prop-level diffing in `Reconciler::reconcile` — for nodes present in both old and new tree at same position with same kind, emit `Operation::Update` containing only props whose values differ in `rn/src/reconciler.rs`; emit nothing if all props identical
-- [ ] T041 [US2] Implement render coalescing in `rn::run` main loop — if multiple `update_sender` messages arrive in the same event-loop tick, drain all and apply only the final tree to the reconciler in `rn/src/lib.rs` (spec Edge Cases: "state changes faster than event loop", analyze G1)
-- [ ] T042 [US2] Implement `MacosRenderer::apply_update()` — for each `Operation::Update`, look up native handle by `NodeId`, apply only changed props (e.g. set `NSTextField.stringValue` for `PropKey::Text`) without destroying/recreating the control in `rn-macos/src/renderer.rs`
-- [ ] T043 [P] [US2] Implement `MacosRenderer::apply_delete()` — remove native control from parent view and release handle from `node_map` in `rn-macos/src/renderer.rs`
-- [ ] T044 [P] [US2] Implement `MacosRenderer::apply_reorder()` — reorder subviews in parent `NSView` per `Operation::Reorder` child_order in `rn-macos/src/renderer.rs`
-- [ ] T045 [US2] Implement `examples/counter/src/main.rs` — state struct with `count: u32`; Increment button handler sends an `Increment` message via `rn::update_sender`; main loop drains, increments state, calls `rn::render` with new tree; label shows "Count: {n}"
+- [X] T041 [US2] Implement render coalescing in `rn::run` main loop — if multiple `update_sender` messages arrive in the same event-loop tick, drain all and apply only the final tree to the reconciler in `rn/src/lib.rs` (spec Edge Cases: "state changes faster than event loop", analyze G1)
+- [X] T042 [US2] Implement `MacosRenderer::apply_update()` — for each `Operation::Update`, look up native handle by `NodeId`, apply only changed props (e.g. set `NSTextField.stringValue` for `PropKey::Text`) without destroying/recreating the control in `rn-macos/src/renderer.rs`
+- [X] T043 [P] [US2] Implement `MacosRenderer::apply_delete()` — remove native control from parent view and release handle from `node_map` in `rn-macos/src/renderer.rs`
+- [X] T044 [P] [US2] Implement `MacosRenderer::apply_reorder()` — reorder subviews in parent `NSView` per `Operation::Reorder` child_order in `rn-macos/src/renderer.rs`
+- [X] T045 [US2] Implement `examples/counter/src/main.rs` — state struct with `count: u32`; Increment button handler sends an `Increment` message via `rn::update_sender`; main loop drains, increments state, calls `rn::render` with new tree; label shows "Count: {n}"
 - [X] T046 [P] [US2] Implement headless reconciler tests in `tests/reconciler/tests.rs`:
   - `test_no_change_produces_empty_changeset`
   - `test_prop_change_produces_update_only`
@@ -144,11 +144,11 @@ namespace. Events arrive as `rn::event::Event`, never as platform types.
 
 ### Implementation for User Story 3
 
-- [ ] T048 [US3] Audit `rn/src/lib.rs` public exports — confirm no `pub use` of any type from `objc2`, `windows`, or `gtk4` crates; fix any leaks found
+- [X] T048 [US3] Audit `rn/src/lib.rs` public exports — confirm no `pub use` of any type from `objc2`, `windows`, or `gtk4` crates; fix any leaks found
 - [X] T049 [P] [US3] Add `#![deny(unreachable_pub)]` to `rn/src/lib.rs` and review all `pub` items to ensure only intended API surface is exported
-- [ ] T050 [P] [US3] Add `#![deny(unused_extern_crates)]` to `examples/hello-world/src/main.rs` and `examples/counter/src/main.rs`; confirm both compile without warnings
-- [ ] T051 [US3] Run `cargo tree -p hello-world --edges normal` and `cargo tree -p counter --edges normal`; confirm `objc2`, `windows`, `gtk4` do NOT appear in consumer direct deps; document result in `specs/001-core-framework/quickstart.md` Validation 3 section
-- [ ] T052 [P] [US3] Verify event type in counter handler is `rn::event::Event` — add compile-time type assertion `let _: rn::event::Event = e;` in `examples/counter/src/main.rs`
+- [X] T050 [P] [US3] Add `#![deny(unused_extern_crates)]` to `examples/hello-world/src/main.rs` and `examples/counter/src/main.rs`; confirm both compile without warnings
+- [X] T051 [US3] Run `cargo tree -p hello-world --edges normal` and `cargo tree -p counter --edges normal`; confirm `objc2`, `windows`, `gtk4` do NOT appear in consumer direct deps; document result in `specs/001-core-framework/quickstart.md` Validation 3 section
+- [X] T052 [P] [US3] Verify event type in counter handler is `rn::event::Event` — add compile-time type assertion `let _: rn::event::Event = e;` in `examples/counter/src/main.rs`
 
 **Checkpoint**: All three user stories independently functional and verified.
 
@@ -159,12 +159,12 @@ namespace. Events arrive as `rn::event::Event`, never as platform types.
 **Purpose**: Benchmarks, docs, metadata, final validation.
 
 - [X] T053 Add `rn/benches/reconciler.rs` using `criterion` dev-dep — benchmark `Reconciler::reconcile` on a 500-node tree; assert p95 < 8ms on local hardware (constitution Principle IV, analyze C1)
-- [ ] T054 Run `cargo bench -p rn` and record result in `docs/benchmarks.md`; fail if p95 ≥ 8ms on reference hardware
-- [ ] T055 [P] Create `docs/backend-status.md` — table of macOS/Windows/Linux widget coverage per widget type with target milestone for Windows/Linux parity (constitution dev-workflow requirement, analyze U2)
-- [ ] T056 [P] Write `README.md` at repo root — product name (Rust Native / `rn`), elevator pitch (declarative cross-platform native UI, React Native model for Rust), quickstart snippet from hello-world, platform support table, link to `specs/001-core-framework/quickstart.md`; include glossary line: "**Rust Native** is the product; **`rn`** is the crate." (analyze D1)
-- [ ] T057 [P] Add crate metadata to `rn/Cargo.toml`: `description`, `license = "MIT OR Apache-2.0"`, `categories = ["gui", "rendering"]`, `keywords = ["native", "gui", "cross-platform", "react-native"]`, `repository = "https://github.com/buroapp/rust-native-ui"`
-- [ ] T058 Run memory stability validation: `cargo test -p rn --test reconciler memory_stability -- --nocapture`; confirm "Heap delta: 0 bytes" output (analyze I1 — test name now matches)
-- [ ] T059 [P] Run full quickstart.md validation checklist — execute Validations 1–4 from `specs/001-core-framework/quickstart.md` and tick off each passing item
+- [X] T054 Run `cargo bench -p rn` and record result in `docs/benchmarks.md`; fail if p95 ≥ 8ms on reference hardware
+- [X] T055 [P] Create `docs/backend-status.md` — table of macOS/Windows/Linux widget coverage per widget type with target milestone for Windows/Linux parity (constitution dev-workflow requirement, analyze U2)
+- [X] T056 [P] Write `README.md` at repo root — product name (Rust Native / `rn`), elevator pitch (declarative cross-platform native UI, React Native model for Rust), quickstart snippet from hello-world, platform support table, link to `specs/001-core-framework/quickstart.md`; include glossary line: "**Rust Native** is the product; **`rn`** is the crate." (analyze D1)
+- [X] T057 [P] Add crate metadata to `rn/Cargo.toml`: `description`, `license = "MIT OR Apache-2.0"`, `categories = ["gui", "rendering"]`, `keywords = ["native", "gui", "cross-platform", "react-native"]`, `repository = "https://github.com/buroapp/rust-native-ui"`
+- [X] T058 Run memory stability validation: `cargo test -p rn --test reconciler memory_stability -- --nocapture`; confirm "Heap delta: 0 bytes" output (analyze I1 — test name now matches)
+- [X] T059 [P] Run full quickstart.md validation checklist — execute Validations 1–4 from `specs/001-core-framework/quickstart.md` and tick off each passing item
 
 ---
 
