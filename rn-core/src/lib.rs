@@ -228,6 +228,7 @@ static DISPATCH: OnceLock<DispatchFn> = OnceLock::new();
 
 /// Install the event dispatcher. Called once by `rn` during initialisation;
 /// idempotent — the first registered function wins.
+#[doc(hidden)] // Internal: not part of the public API contract
 pub fn set_dispatch_bridge(f: DispatchFn) {
     let _ = DISPATCH.set(f);
 }
@@ -251,6 +252,7 @@ type TickFn = fn();
 static TICK: OnceLock<TickFn> = OnceLock::new();
 
 /// Install the per-tick trampoline. Idempotent.
+#[doc(hidden)] // Internal: not part of the public API contract
 pub fn set_tick_bridge(f: TickFn) {
     let _ = TICK.set(f);
 }
@@ -279,6 +281,7 @@ pub trait ApplyBridge: Send + Sync {
 static APPLY: OnceLock<Box<dyn ApplyBridge>> = OnceLock::new();
 
 /// Install the apply bridge. Idempotent — first registration wins.
+#[doc(hidden)] // Internal: not part of the public API contract
 pub fn set_apply_bridge(bridge: Box<dyn ApplyBridge>) {
     let _ = APPLY.set(bridge);
 }

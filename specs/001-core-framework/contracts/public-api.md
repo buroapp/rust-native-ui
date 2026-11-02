@@ -174,18 +174,45 @@ pub enum ReconcileError {
 
 - `rn::render` and `rn::run` MUST be called from the platform main thread.
 - Calling from any other thread returns `Err(RnError::WrongThread)` — no panic.
-- Background threads post state updates by cloning a `crossbeam-channel::Sender`
-  obtained via `rn::update_sender()` and sending a message; the main event loop
-  drains the receiver each tick and calls `rn::render` with the new tree.
+- Background threads post state updates by cloning a `crossbeam_channel::Sender`
+  obtained via `rn::update_sender()` and sending a message wrapped in
+  `UpdateMessage::new(value)`; the main event loop drains the receiver each tick
+  and calls `rn::render` with the new tree.
 - `HandlerId` registration (`rn::on`) is thread-safe (`Send + Sync` internally)
   so handlers may be registered before the event loop starts, from any thread.
 
 ```rust
-pub fn update_sender<M: Send + 'static>() -> crossbeam_channel::Sender<M>
+// The type-erased message envelope (rn/src/lib.rs)
+pub struct UpdateMessage(/* opaque */);
+
+impl UpdateMessage {
+    pub fn new<T: Send + 'static>(value: T) -> Self;
+    pub fn downcast<T: Send + 'static>(self) -> Result<T, Self>;
+}
+
+// Returns a sender onto the single framework-wide update channel.
+// Messages must be wrapped in `UpdateMessage::new(value)`.
+pub fn update_sender() -> crossbeam_channel::Sender<UpdateMessage>
+```
+
+Usage pattern (counter example):
+
+```rust
+let tx = rn::update_sender();
+rn::on(press_id, move |_| {
+    let _ = tx.send(rn::UpdateMessage::new(Msg::Increment));
+});
+
+// In the set_tick closure:
+for msg in rn::drain_updates() {
+    if let Ok(Msg::Increment) = msg.downcast::<Msg>() {
+        count += 1;
+    }
+}
 ```
 
 Returns a sender keyed to the current main-thread message queue. The main event
-loop drains the matching receiver each tick.
+loop drains the matching receiver each tick via `rn::drain_updates()`.
 
 ---
 
@@ -217,3 +244,4 @@ loop drains the matching receiver each tick.
 | `NodeId` (opaque) | Stable (value not guaranteed) |
 | `Changeset`, `Operation` | Internal — not part of public API |
 | Platform backend crates (`rn-macos` etc.) | Internal — subject to change |
+| `rn::backend` module | Internal — `#[doc(hidden)]`, subject to change |

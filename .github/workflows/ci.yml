@@ -43,6 +43,15 @@ jobs:
       - name: cargo check (rn with ${{ matrix.feature }} backend)
         run: cargo check -p rn --features ${{ matrix.feature }}
 
+      - name: cargo build (hello-world)
+        run: cargo build -p hello-world --features ${{ matrix.feature }}
+
+      - name: cargo build (counter)
+        run: cargo build -p counter --features ${{ matrix.feature }}
+
+      - name: cargo build (gallery)
+        run: cargo build -p gallery --features ${{ matrix.feature }}
+
       - name: cargo test (headless reconciler suite)
         run: cargo test -p rn --test reconciler
 

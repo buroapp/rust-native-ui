@@ -33,6 +33,12 @@ pub use rn_core::NodeId;
 /// Platform backend bindings. Enabled by the `macos`, `windows`, or `linux`
 /// feature flag. Only the renderer type is re-exported; no `objc2`/`windows`/
 /// `gtk4` symbols leak through this module (US3 / FR-007).
+///
+/// This module is internal and subject to change without a semver bump.
+/// Consumers should use `rn::render` and `rn::run` directly and let the
+/// feature flag select the backend; only import from this module when you
+/// need to name the renderer type explicitly (e.g. to call `::new()`).
+#[doc(hidden)]
 pub mod backend {
     #[cfg(feature = "macos")]
     pub use rn_macos::MacosRenderer;
