@@ -70,6 +70,11 @@ Windows + Linux scaffolded), 2 example apps, headless reconciler test suite.
 **Post-design re-check**: All gates pass. No violations. Complexity Tracking table
 not required.
 
+**Deliverables update (2026-11-02)**: v0.1 shipped 5 widgets, but v0.2+ now delivers 15
+widget types (Label, Button, TextInput, Checkbox, Slider, ProgressBar, Stepper,
+Separator, Dropdown, RadioGroup, ColorWell, DatePicker, Image/SF Symbol, TextArea).
+Windows + Linux backends remain scaffolded stubs.
+
 ---
 
 ## Project Structure
