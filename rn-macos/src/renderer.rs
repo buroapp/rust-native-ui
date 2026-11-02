@@ -217,6 +217,18 @@ impl PlatformRenderer for MacosRenderer {
         stash_delegate(NodeId(u64::MAX - 1), DelegateHandle::Tick(target));
         self.state.borrow_mut()._tick_timer = Some(timer);
 
+        // Force an immediate layout pass once the event loop is about to start.
+        // `makeKeyAndOrderFront` was called during `render()` before the event
+        // loop started, so `windowDidBecomeKey:` never fires as a transition;
+        // the contentView frame is now valid so we relayout everything here.
+        {
+            let s = self.state.borrow();
+            let roots: Vec<NodeId> = s.windows.clone();
+            for root in roots {
+                relayout_window(&s, root);
+            }
+        }
+
         unsafe { app.activate() };
         unsafe { app.run() };
         Ok(())
