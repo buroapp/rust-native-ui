@@ -6,6 +6,14 @@
 
 **Status**: Draft
 
+## Clarifications
+
+### Session 2026-11-02
+
+- Q: On which thread may consumers call `rn::render`? → A: Main thread only; cross-thread state updates post messages via `crossbeam-channel`, and the event loop drains them and calls `rn::render` on the main thread.
+- Q: What happens when a consumer-registered event handler panics? → A: Framework wraps every handler dispatch in `std::panic::catch_unwind`, logs the panic via the `log` crate at error level, and continues the event loop. Consumer state is left untouched.
+- Q: Does the framework emit observability events for internal lifecycle (reconcile stats, native-call failures)? → A: Use the `log` crate only — emit `debug!`/`trace!` for reconcile stats and native-call failures, `error!` for panics. No `tracing` dep in v1; consumers can bridge via `tracing-log` externally.
+
 ## User Scenarios & Testing
 
 ### User Story 1 — Write Once, Run Native Everywhere (Priority: P1)
@@ -131,6 +139,19 @@ to the consumer shows no platform-backend crate in scope.
   input, and vertical/horizontal layout container as primitive widget types.
 - **FR-010**: The framework MUST deliver a changeset to the platform renderer within
   8ms of a state change on minimum target hardware for a tree of up to 500 nodes.
+- **FR-011**: `rn::render` MUST be called from the platform main thread only. Background
+  threads MUST post state updates via a `crossbeam-channel` sender; the main event
+  loop drains the receiver and triggers `rn::render` on the main thread.
+- **FR-012**: Calling `rn::render` from a non-main thread MUST return
+  `Err(RnError::WrongThread)` rather than panicking.
+- **FR-013**: The framework MUST wrap every consumer-registered event handler dispatch
+  in `std::panic::catch_unwind`. On panic, the framework MUST log the panic at `error`
+  level via the `log` crate and continue the event loop. Framework-owned state MUST
+  NOT be mutated as a result of the handler panic.
+- **FR-014**: The framework MUST emit observability events via the `log` crate:
+  `debug!`/`trace!` for reconciler timings and changeset summaries, `warn!` for
+  native-call failures that are recovered, `error!` for unrecoverable platform errors
+  and handler panics. No `tracing` dependency is introduced in v1.
 
 ### Key Entities
 

@@ -31,6 +31,6 @@
 
 ## Notes
 
-All items pass. One assumption to watch: macOS-first renderer with Windows/Linux
-scaffolded at v0.1 — this is a scope boundary, not a spec gap. Confirm with planning
-whether v0.1 CI requires all three platforms to compile or just macOS.
+All items pass. Clarifications session 2026-11-02 resolved 3 ambiguities: threading
+model, handler panic policy, observability. Open items from `/speckit-analyze` (CI
+matrix, perf benchmark task, test-name alignment) are task-layer gaps, not spec gaps.

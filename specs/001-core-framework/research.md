@@ -140,3 +140,75 @@ background work.
   platform events.
 - Callback registration directly on native controls: couples consumer code to platform
   types, violating Principle III.
+
+---
+
+## Threading Model
+
+**Decision**: `rn::render` is **main-thread only**. Non-main callers get
+`Err(RnError::WrongThread)`. Background threads post updates via a `crossbeam-channel`
+sender; the main event loop drains the receiver and calls `rn::render` on the main
+thread. (FR-011, FR-012)
+
+**Rationale**: AppKit (macOS), HWND messaging (Windows), and GTK all require UI mutation
+on their respective main threads. A single main-thread rule in `rn` aligns with the OS
+reality and eliminates the need for internal locking of reconciler/renderer state.
+Mirrors React Native's main-thread rule — a proven model.
+
+**Implementation note**: Store a `MainThreadMarker` (platform-specific main-thread token
+on macOS; thread-id check on Windows/Linux) in the renderer. `rn::render` verifies the
+marker before touching the reconciler. Cheap check; always-correct result.
+
+**Alternatives considered**:
+- Transparent main-thread hop via `dispatch_async` / `PostMessage`: hides the thread
+  boundary and makes `rn::render` fire-and-forget, which complicates error propagation.
+- Multi-threaded render with `Mutex`-guarded reconciler: adds lock contention on the hot
+  path; violates Principle IV budget indirectly.
+
+---
+
+## Handler Panic Policy
+
+**Decision**: Wrap every consumer-registered handler dispatch in
+`std::panic::catch_unwind`. On panic: emit `log::error!` with the panic payload (if
+`Any::downcast_ref::<String>` or `&str`) and continue the event loop. Framework-owned
+state is never mutated as a result of a handler panic. (FR-013)
+
+**Rationale**: A single buggy consumer handler should not kill the whole UI. This is
+exactly React Native's model. Principle III ("no panics in library code") concerns
+framework code itself — consumer callbacks are explicitly out of scope for that rule.
+
+**Implementation note**: Register handler as `Box<dyn Fn(Event) + Send + 'static>`,
+dispatch via `std::panic::catch_unwind(AssertUnwindSafe(|| handler(event)))`. The
+`AssertUnwindSafe` is correct here because framework state is unaffected and consumer
+state is the consumer's problem.
+
+**Alternatives considered**:
+- Propagate panic: simplest but worst UX — one bad handler kills the app.
+- Synthetic `Event::HandlerPanic`: adds API surface and asks consumers to handle a
+  rare case. Defer until a real use case appears (Principle V).
+
+---
+
+## Observability
+
+**Decision**: Use the `log` facade crate only. Framework emits:
+- `trace!` — per-render reconciler timings and node counts.
+- `debug!` — changeset summaries (op counts per kind).
+- `warn!` — recoverable native-call failures (e.g., a prop update that the OS clamped).
+- `error!` — unrecoverable `RenderError` and handler panics.
+
+No `tracing` dependency in v1. (FR-014)
+
+**Rationale**: `log` is already a required dependency for FR-013. It's the de-facto
+standard facade — consumers can plug in `env_logger`, `simplelog`, or bridge to
+`tracing` via `tracing-log`. `trace!`/`debug!` are zero-cost when disabled at compile
+time via `log` feature flags. Adding `tracing` now would double the observability
+surface for a framework that has no span-rich internal structure yet.
+
+**Alternatives considered**:
+- `tracing` crate with spans: richer but adds a required dep and more API surface for
+  consumers to understand. Revisit when the framework has multi-phase pipelines worth
+  instrumenting (post-v1).
+- Panic-only logging (FR-013 only): rejected — the framework needs observable
+  reconciler metrics to validate Principle IV (<8ms budget).

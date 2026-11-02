@@ -153,11 +153,13 @@ use `rn::render` and `rn::run` which accept `impl PlatformRenderer`.
 pub enum RnError {
     Render(RenderError),
     Reconcile(ReconcileError),
+    WrongThread,                 // FR-012: render() called off main thread
 }
 
 pub enum RenderError {
     OsError(String),
     InvalidNode(NodeId),
+    WrongThread,
 }
 
 pub enum ReconcileError {
@@ -168,15 +170,50 @@ pub enum ReconcileError {
 
 ---
 
+## Threading Contract (FR-011, FR-012)
+
+- `rn::render` and `rn::run` MUST be called from the platform main thread.
+- Calling from any other thread returns `Err(RnError::WrongThread)` — no panic.
+- Background threads post state updates by cloning a `crossbeam-channel::Sender`
+  obtained via `rn::update_sender()` and sending a message; the main event loop
+  drains the receiver each tick and calls `rn::render` with the new tree.
+- `HandlerId` registration (`rn::on`) is thread-safe (`Send + Sync` internally)
+  so handlers may be registered before the event loop starts, from any thread.
+
+```rust
+pub fn update_sender<M: Send + 'static>() -> crossbeam_channel::Sender<M>
+```
+
+Returns a sender keyed to the current main-thread message queue. The main event
+loop drains the matching receiver each tick.
+
+---
+
+## Panic & Logging Contract (FR-013, FR-014)
+
+- Every registered handler is dispatched inside `std::panic::catch_unwind`.
+  A panic in a handler is logged via `log::error!` and the event loop continues.
+- The framework uses the `log` facade crate. Consumers choose a logger
+  implementation (e.g. `env_logger`, `simplelog`) and initialise it themselves.
+- Framework log sites:
+  - `trace!` — reconciler per-render timing and node counts
+  - `debug!` — changeset summaries
+  - `warn!` — recoverable native-call failures
+  - `error!` — unrecoverable platform errors, handler panics
+
+---
+
 ## Stability Guarantees
 
 | Surface | Stability |
 |---------|-----------|
-| `rn::render`, `rn::run`, `rn::on` | Stable (semver protected) |
+| `rn::render`, `rn::run`, `rn::on`, `rn::update_sender` | Stable (semver protected) |
 | Builder API (`rn::window()` etc.) | Stable |
 | `PlatformRenderer` trait | Stable |
 | `Event`, `EventKind`, `EventPayload` | Stable |
 | `RnError`, `RenderError`, `ReconcileError` | Stable |
+| Threading contract (main-thread-only) | Stable (FR-011/FR-012) |
+| Panic & logging contract | Stable (FR-013/FR-014) |
 | `NodeId` (opaque) | Stable (value not guaranteed) |
 | `Changeset`, `Operation` | Internal — not part of public API |
 | Platform backend crates (`rn-macos` etc.) | Internal — subject to change |

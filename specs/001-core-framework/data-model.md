@@ -116,6 +116,26 @@ Zero platform types — fully serialisable and testable in isolation.
 
 ---
 
+```
+RenderError (enum)
+  OsError(String)
+  InvalidNode(NodeId)
+  WrongThread                          # FR-012: render() called off-main
+```
+
+```
+ReconcileError (enum)
+  DuplicateKey(String)
+  OrphanedNode(NodeId)
+```
+
+```
+RnError (enum)
+  Render(RenderError)
+  Reconcile(ReconcileError)
+  WrongThread                          # FR-012: top-level mirror for ergonomics
+```
+
 ### `Reconciler`
 
 ```

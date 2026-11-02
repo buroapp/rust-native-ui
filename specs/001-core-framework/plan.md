@@ -1,6 +1,6 @@
 # Implementation Plan: Core Framework
 
-**Branch**: `001-core-framework` | **Date**: 2026-11-02 | **Spec**: [spec.md](spec.md)
+**Branch**: `001-core-framework` | **Date**: 2026-11-02 (clarified 2026-11-02 session) | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `specs/001-core-framework/spec.md`
 
@@ -27,6 +27,7 @@ renderer with Windows and Linux backends scaffolded.
 - `windows` crate — Win32 controls (Windows backend)
 - `gtk4` — GTK4 bindings (Linux backend)
 - `crossbeam-channel` — event dispatch between platform loop and app
+- `log` — framework-emitted observability (debug/trace/warn/error, panic logging)
 
 **Storage**: N/A — no persistent storage
 
@@ -41,7 +42,12 @@ Platform renderer tests require a display server and run in platform CI jobs.
 target hardware (see constitution). 60fps capable event loop.
 
 **Constraints**: No platform types in public API (`rn` crate). No `unwrap()`/
-`expect()` in library code. Reconciler testable headlessly.
+`expect()` in library code. Reconciler testable headlessly. `rn::render` MUST be
+called from the platform main thread (FR-011); non-main calls return
+`RnError::WrongThread` (FR-012). Consumer event handlers wrapped in
+`catch_unwind` — handler panics are logged at `error` level and the event loop
+continues (FR-013). Framework emits `log` events only; no `tracing` dep in v1
+(FR-014).
 
 **Scale/Scope**: v0.1 — 5 widget types, 3 platform backends (macOS complete,
 Windows + Linux scaffolded), 2 example apps, headless reconciler test suite.
