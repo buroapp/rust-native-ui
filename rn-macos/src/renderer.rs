@@ -646,47 +646,36 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
             continue;
         };
 
-        // `rect` is absolute (relative to the layout root = content view).
-        // AppKit NSView frames are relative to the superview's coordinate space.
-        // For views whose superview IS the content view (LayoutContainers directly
-        // inside the window), the rect is already in the right space.
-        // For leaf views (Label/Button/TextInput) whose superview is a nested
-        // LayoutContainer, we must subtract the parent's absolute origin.
-        let parent_origin = state
-            .shadow
-            .get(&node_id)
-            .and_then(|sn| sn.parent)
-            .and_then(|pid| result.rects.get(&rn_layout::LayoutNodeId(pid.0)))
-            .map(|pr| (pr.x, pr.y))
-            .unwrap_or((0.0, 0.0));
+        // `rect` is in absolute coords (origin = content view top-left).
+        // Each view's frame must be expressed relative to its immediate
+        // superview. Look up the shadow parent; if it has a taffy rect,
+        // subtract it to get superview-relative coords.
+        let shadow_parent_id = state.shadow.get(&node_id).and_then(|sn| sn.parent);
 
-        // Rect relative to immediate superview.
-        let local_x = rect.x - parent_origin.0;
-        let local_y = rect.y - parent_origin.1;
+        let (local_x, local_y, superview_height) =
+            match shadow_parent_id.and_then(|pid| result.rects.get(&rn_layout::LayoutNodeId(pid.0))) {
+                Some(parent_rect) => {
+                    // Parent has a taffy rect → coords are relative to parent.
+                    let lx = rect.x - parent_rect.x;
+                    let ly = rect.y - parent_rect.y;
+                    (lx, ly, parent_rect.height)
+                }
+                None => {
+                    // No parent rect (direct content-view child or window child).
+                    (rect.x, rect.y, content_height)
+                }
+            };
 
-        // Flip y from taffy (top-left) to AppKit (bottom-left).
-        // The superview's height is either the content view's or the parent rect's.
-        let superview_height = if parent_origin.0 == 0.0 && parent_origin.1 == 0.0 {
-            content_height
-        } else {
-            state
-                .shadow
-                .get(&node_id)
-                .and_then(|sn| sn.parent)
-                .and_then(|pid| result.rects.get(&rn_layout::LayoutNodeId(pid.0)))
-                .map(|pr| pr.height)
-                .unwrap_or(content_height)
-        };
-
+        // Flip y from taffy (top-left origin) to AppKit (bottom-left origin).
         let flipped_y = superview_height - local_y - rect.height;
         let ns = NSRect::new(
             NSPoint::new(local_x as f64, flipped_y as f64),
             NSSize::new(rect.width as f64, rect.height as f64),
         );
         log::trace!(
-            "setFrame {:?} → x={:.0} y={:.0} w={:.0} h={:.0} (abs:{:.0},{:.0} parent:{:.0},{:.0})",
+            "setFrame {:?} → x={:.0} y={:.0} w={:.0} h={:.0} (abs:{:.0},{:.0} parent:{:?})",
             node_id, local_x, flipped_y, rect.width, rect.height,
-            rect.x, rect.y, parent_origin.0, parent_origin.1
+            rect.x, rect.y, shadow_parent_id
         );
         unsafe { view.setFrame(ns) };
     }
@@ -752,6 +741,11 @@ declare_class!(
         #[method(fire:)]
         fn fire(&self, _sender: Option<&AnyObject>) {
             let ivars = self.ivars();
+            log::debug!(
+                "ButtonTarget::fire — handler={:?} source={:?}",
+                ivars.handler,
+                ivars.source
+            );
             let event = Event {
                 source: ivars.source,
                 handler: ivars.handler,
