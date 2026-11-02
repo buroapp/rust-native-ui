@@ -235,3 +235,14 @@ namespace. Events arrive as `rn::event::Event`, never as platform types.
 - FR-011..FR-014 (threading, panic policy, observability) covered by T022–T024,
   T026–T028, T046 (thread + panic tests)
 - Analyze findings: C1→T053/T054, C2→T013, I1→T046/T058, U1→T010, U2→T055, G1→T041, D1→T056
+
+---
+
+## Phase 7: Convergence
+
+- [ ] T060 [P] Sync `update_sender` contract with implementation — update `specs/001-core-framework/contracts/public-api.md` Threading Contract section to reflect actual signature `pub fn update_sender() -> crossbeam_channel::Sender<UpdateMessage>` (type-erased, not generic), remove the generic `<M>` version, and document `UpdateMessage::new`/`downcast` as the typed wrapping mechanism per `rn/src/lib.rs` (contradicts, F1)
+- [ ] T061 [P] Mark internal bridge functions in `rn-core/src/lib.rs` as `#[doc(hidden)]` — annotate `set_dispatch_bridge`, `set_apply_bridge`, and `set_tick_bridge` with `#[doc(hidden)]` and a `// Internal: not part of the public API contract` comment so consumers cannot accidentally stabilise against them (partial, F2)
+- [ ] T062 [P] Add example crate build steps to CI — extend `.github/workflows/ci.yml` to include `cargo build -p hello-world --features ${{ matrix.feature }}`, `cargo build -p counter --features ${{ matrix.feature }}`, and `cargo build -p gallery --features ${{ matrix.feature }}` so all three examples are verified on all three platforms per each PR (missing, F3)
+- [ ] T063 [P] Append confirmed `cargo tree` output to `specs/001-core-framework/quickstart.md` Validation 3 — run `cargo tree -p hello-world --edges normal` and `cargo tree -p counter --edges normal`, confirm no `objc2`/`windows`/`gtk4` in direct deps, and append a `### Confirmed Output` subsection with the trimmed tree so the validation is documented as observed, not just expected (partial, F4)
+- [ ] T064 [P] Annotate `rn::backend` module as unstable/internal — add `#[doc(hidden)]` to the `pub mod backend` block in `rn/src/lib.rs` or add a `rn::backend` row to `specs/001-core-framework/contracts/public-api.md`'s Stability table as `Internal — subject to change` to make its status explicit (unrequested, F5)
+- [ ] T065 [P] Align quickstart Validation 5 expected output with test reality — update `specs/001-core-framework/quickstart.md` Validation 4 (memory stability) expected output to read "1000 cycles complete. Heap delta: 0 bytes." matching the string printed by the `memory_stability` test in `tests/reconciler/tests.rs` (partial, F6)

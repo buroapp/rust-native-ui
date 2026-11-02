@@ -37,3 +37,7 @@ required-features = []
 [[test]]
 name = "reconciler"
 path = "../tests/reconciler/tests.rs"
+
+[[test]]
+name = "e2e_gallery"
+path = "../tests/e2e/gallery.rs"

@@ -727,6 +727,23 @@ declare_class!(
             rn_core::dispatch_event(event);
             true
         }
+
+        /// Re-run taffy layout whenever the window is resized so subview
+        /// frames stay correct. Called by AppKit on every live-resize tick.
+        #[method(windowDidResize:)]
+        fn window_did_resize(&self, _notif: &NSNotification) {
+            let window_id = self.ivars().source;
+            with_state(|s| relayout_window(s, window_id));
+        }
+
+        /// Trigger layout on first display: the contentView frame is 0×0
+        /// when `render()` is called before the window is on screen; this
+        /// fires once the window actually appears and gives us real geometry.
+        #[method(windowDidBecomeKey:)]
+        fn window_did_become_key(&self, _notif: &NSNotification) {
+            let window_id = self.ivars().source;
+            with_state(|s| relayout_window(s, window_id));
+        }
     }
 );
 
