@@ -584,7 +584,15 @@ fn create_node(
             };
             if let Some(PropValue::String(name)) = props.get(&PropKey::ImageName) {
                 let ns_name = NSString::from_str(name);
-                if let Some(img) = unsafe { NSImage::imageNamed(&ns_name) } {
+                // Try SF Symbol first (macOS 11+), fall back to named image.
+                let img = unsafe {
+                    NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                        &ns_name,
+                        None,
+                    )
+                    .or_else(|| NSImage::imageNamed(&ns_name))
+                };
+                if let Some(img) = img {
                     unsafe { image_view.setImage(Some(&img)) };
                 }
             }

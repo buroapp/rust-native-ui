@@ -64,6 +64,14 @@ pub fn label(text: impl Into<String>) -> Component {
         .build()
 }
 
+/// Build a `Label` with an explicit minimum width (useful for aligned form rows).
+pub fn label_w(text: impl Into<String>, min_width: f32) -> Component {
+    ComponentBuilder::new(ComponentKind::Label)
+        .prop(PropKey::Text, PropValue::String(text.into()))
+        .prop(PropKey::MinWidth, PropValue::F32(min_width))
+        .build()
+}
+
 /// Start building a `Button` component with the given label text.
 pub fn button(label: impl Into<String>) -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::Button).prop(PropKey::Text, PropValue::String(label.into()))

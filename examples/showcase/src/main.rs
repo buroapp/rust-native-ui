@@ -166,20 +166,20 @@ fn main() -> Result<(), rn::RnError> {
                             .child(rn::label("── Basic widgets ─────────────────────────────"))
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Label:"))
+                                    .child(rn::label_w("Label:", 100.0))
                                     .child(rn::label("Hello, Rust Native!"))
                                     .build()
                             )
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Button:"))
+                                    .child(rn::label_w("Button:", 100.0))
                                     .child(rn::button("Click me").on_press(click_id).build())
                                     .child(rn::label(format!("Clicked: {}", s.clicks)))
                                     .build()
                             )
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("TextInput:"))
+                                    .child(rn::label_w("TextInput:", 100.0))
                                     .child(
                                         rn::text_input()
                                             .placeholder("Type here…")
@@ -191,7 +191,7 @@ fn main() -> Result<(), rn::RnError> {
                             )
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Checkbox:"))
+                                    .child(rn::label_w("Checkbox:", 100.0))
                                     .child(
                                         rn::checkbox("Enable dark mode", s.checkbox_on)
                                             .on_change(checkbox_id)
@@ -204,7 +204,7 @@ fn main() -> Result<(), rn::RnError> {
                             .child(rn::label("── Range controls ────────────────────────────"))
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Slider:"))
+                                    .child(rn::label_w("Slider:", 100.0))
                                     .child(
                                         rn::slider(s.slider_val, 0.0, 100.0)
                                             .on_change(slider_id)
@@ -215,14 +215,14 @@ fn main() -> Result<(), rn::RnError> {
                             )
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Progress:"))
+                                    .child(rn::label_w("Progress:", 100.0))
                                     .child(rn::progress_bar(s.slider_val).build())
                                     .child(rn::label(format!("{:.0}%", s.slider_val)))
                                     .build()
                             )
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Stepper:"))
+                                    .child(rn::label_w("Stepper:", 100.0))
                                     .child(
                                         rn::stepper(s.stepper_val, 0.0, 100.0, 1.0)
                                             .on_change(stepper_id)
@@ -236,7 +236,7 @@ fn main() -> Result<(), rn::RnError> {
                             .child(rn::label("── Selection controls ────────────────────────"))
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Dropdown:"))
+                                    .child(rn::label_w("Dropdown:", 100.0))
                                     .child(
                                         rn::dropdown(dropdown_options.clone(), s.dropdown_idx)
                                             .on_change(dropdown_id)
@@ -246,7 +246,7 @@ fn main() -> Result<(), rn::RnError> {
                             )
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Radio:"))
+                                    .child(rn::label_w("Radio:", 100.0))
                                     .child(
                                         rn::radio_group(radio_options.clone(), s.radio_idx)
                                             .on_change(radio_id)
@@ -259,7 +259,7 @@ fn main() -> Result<(), rn::RnError> {
                             .child(rn::label("── Media & date ──────────────────────────────"))
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Color well:"))
+                                    .child(rn::label_w("Color well:", 100.0))
                                     .child(rn::color_well(s.color).on_change(color_id).build())
                                     .child(rn::label(format!(
                                         "R:{} G:{} B:{}", s.color.r, s.color.g, s.color.b
@@ -268,13 +268,13 @@ fn main() -> Result<(), rn::RnError> {
                             )
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Date picker:"))
+                                    .child(rn::label_w("Date picker:", 100.0))
                                     .child(rn::date_picker("2026-11-02").on_change(date_id).build())
                                     .build()
                             )
                             .child(
                                 rn::hstack().gap(8.0)
-                                    .child(rn::label("Image (SF):"))
+                                    .child(rn::label_w("Image (SF):", 100.0))
                                     .child(rn::image("star.fill").build())
                                     .build()
                             )
