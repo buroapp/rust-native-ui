@@ -1,0 +1,14 @@
+[package]
+name = "rn-linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Internal: GTK4 backend for Rust Native"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rn-core = { path = "../rn-core", version = "0.1.0" }
+gtk4 = { workspace = true }
+log = { workspace = true }

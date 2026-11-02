@@ -28,19 +28,19 @@ testing of each story.
 
 **Purpose**: Cargo workspace initialization, lint config, CI matrix.
 
-- [ ] T001 Create Cargo workspace root `Cargo.toml` with members: `rn`, `rn-layout`, `rn-macos`, `rn-windows`, `rn-linux`, `examples/hello-world`, `examples/counter`
-- [ ] T002 Create `rn/Cargo.toml` with deps: `crossbeam-channel`, `log`, and `rn-layout` as path dep; feature flags `macos`/`windows`/`linux` each enabling the respective backend crate
-- [ ] T003 [P] Create `rn-layout/Cargo.toml` with dep: `taffy`
-- [ ] T004 [P] Create `rn-macos/Cargo.toml` with deps: `objc2`, `objc2-app-kit`, `log`, `rn` as path dep; `[target.'cfg(target_os="macos")']`
-- [ ] T005 [P] Create `rn-windows/Cargo.toml` with deps: `windows` crate, `log`; `[target.'cfg(target_os="windows")']`
-- [ ] T006 [P] Create `rn-linux/Cargo.toml` with deps: `gtk4`, `log`; `[target.'cfg(target_os="linux")']`
-- [ ] T007 [P] Create `examples/hello-world/Cargo.toml` with deps: `rn` as path dep, `env_logger`
-- [ ] T008 [P] Create `examples/counter/Cargo.toml` with deps: `rn` as path dep, `env_logger`
-- [ ] T009 [P] Create empty `src/lib.rs` (or `src/main.rs`) stub files for all crates so workspace builds clean
-- [ ] T010 [P] Create `clippy.toml` at repo root and add crate-level `#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]` to `rn/src/lib.rs`, `rn-layout/src/lib.rs`, `rn-macos/src/lib.rs`, `rn-windows/src/lib.rs`, `rn-linux/src/lib.rs` (FR-008 enforcement, analyze U1)
-- [ ] T011 [P] Create `rust-toolchain.toml` at repo root pinning `channel = "stable"`
-- [ ] T012 [P] Create `.gitignore` at repo root (target/, .DS_Store, *.swp)
-- [ ] T013 [P] Create `.github/workflows/ci.yml` with matrix build+test on `macos-latest`, `windows-latest`, `ubuntu-latest` running `cargo check --features rn/<platform>`, `cargo test -p rn --test reconciler`, `cargo clippy -- -D warnings` (constitution dev-workflow requirement, analyze C2)
+- [X] T001 Create Cargo workspace root `Cargo.toml` with members: `rn`, `rn-layout`, `rn-macos`, `rn-windows`, `rn-linux`, `examples/hello-world`, `examples/counter`
+- [X] T002 Create `rn/Cargo.toml` with deps: `crossbeam-channel`, `log`, and `rn-layout` as path dep; feature flags `macos`/`windows`/`linux` each enabling the respective backend crate
+- [X] T003 [P] Create `rn-layout/Cargo.toml` with dep: `taffy`
+- [X] T004 [P] Create `rn-macos/Cargo.toml` with deps: `objc2`, `objc2-app-kit`, `log`, `rn` as path dep; `[target.'cfg(target_os="macos")']`
+- [X] T005 [P] Create `rn-windows/Cargo.toml` with deps: `windows` crate, `log`; `[target.'cfg(target_os="windows")']`
+- [X] T006 [P] Create `rn-linux/Cargo.toml` with deps: `gtk4`, `log`; `[target.'cfg(target_os="linux")']`
+- [X] T007 [P] Create `examples/hello-world/Cargo.toml` with deps: `rn` as path dep, `env_logger`
+- [X] T008 [P] Create `examples/counter/Cargo.toml` with deps: `rn` as path dep, `env_logger`
+- [X] T009 [P] Create empty `src/lib.rs` (or `src/main.rs`) stub files for all crates so workspace builds clean
+- [X] T010 [P] Create `clippy.toml` at repo root and add crate-level `#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]` to `rn/src/lib.rs`, `rn-layout/src/lib.rs`, `rn-macos/src/lib.rs`, `rn-windows/src/lib.rs`, `rn-linux/src/lib.rs` (FR-008 enforcement, analyze U1)
+- [X] T011 [P] Create `rust-toolchain.toml` at repo root pinning `channel = "stable"`
+- [X] T012 [P] Create `.gitignore` at repo root (target/, .DS_Store, *.swp)
+- [X] T013 [P] Create `.github/workflows/ci.yml` with matrix build+test on `macos-latest`, `windows-latest`, `ubuntu-latest` running `cargo check --features rn/<platform>`, `cargo test -p rn --test reconciler`, `cargo clippy -- -D warnings` (constitution dev-workflow requirement, analyze C2)
 
 ---
 
@@ -51,21 +51,21 @@ infrastructure that MUST be complete before any user story work.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T014 Define `NodeId`, `ComponentKind`, `Props` (`PropKey`, `PropValue`), `Component`, `ComponentTree` in `rn/src/component.rs` per data-model.md
-- [ ] T015 [P] Define `Event`, `EventKind`, `EventPayload`, `HandlerId` in `rn/src/event.rs` per data-model.md
-- [ ] T016 Define `Operation` enum (Create/Update/Delete/Reorder) and `Changeset` struct in `rn/src/reconciler.rs` per data-model.md
-- [ ] T017 Define `PlatformRenderer` trait (`apply`, `run_event_loop`) in `rn/src/renderer.rs` per contracts/public-api.md
-- [ ] T018 Define `RnError` (with `WrongThread` variant), `RenderError` (with `WrongThread` variant), `ReconcileError` in `rn/src/error.rs` per contracts/public-api.md (FR-012)
-- [ ] T019 Implement `Reconciler` struct with `previous: Option<ComponentTree>` and `node_map` in `rn/src/reconciler.rs`; implement `reconcile(&mut self, next: ComponentTree) -> Result<Changeset, ReconcileError>` using position-based identity heuristic (research.md: Reconciler Algorithm)
-- [ ] T020 Implement explicit key support in `Reconciler::reconcile` — detect keyed nodes, emit `Reorder` instead of Delete+Create when key matches a sibling in `rn/src/reconciler.rs`
-- [ ] T021 [P] Implement `compute_layout(tree: &ComponentTree) -> LayoutResult` using `taffy` in `rn-layout/src/lib.rs`; `LayoutResult` maps `NodeId` to absolute pixel rect
-- [ ] T022 Implement `MainThreadGuard` in `rn/src/thread.rs` — captures main-thread id on first init via `std::thread::current().id()`, exposes `check() -> Result<(), RnError>` returning `WrongThread` from any other thread (FR-011, FR-012)
-- [ ] T023 Implement global handler registry in `rn/src/lib.rs` using `OnceLock<Mutex<HashMap<HandlerId, Box<dyn Fn(Event) + Send + 'static>>>>`; expose `rn::on(id, handler)` — thread-safe registration (FR-013 contract)
-- [ ] T024 Implement panic-safe dispatch helper `dispatch_handler(id, event)` in `rn/src/lib.rs` — wraps call in `std::panic::catch_unwind(AssertUnwindSafe(…))`; on panic, logs via `log::error!("handler {id:?} panicked: {payload}")` and continues (FR-013)
-- [ ] T025 Implement builder API (`rn::window()`, `rn::label()`, `rn::button()`, `rn::text_input()`, `rn::vstack()`, `rn::hstack()`, `rn::keyed()`) in `rn/src/lib.rs` per contracts/public-api.md
-- [ ] T026 Implement `rn::update_sender<M>() -> crossbeam_channel::Sender<M>` and matching main-loop drain in `rn/src/lib.rs` (FR-011)
-- [ ] T027 Implement `rn::render<R: PlatformRenderer>(renderer, tree) -> Result<(), RnError>` in `rn/src/lib.rs` — first calls `MainThreadGuard::check()?`, then reconciler, then `renderer.apply`; emits `log::trace!` for timing and `log::debug!` for changeset op counts (FR-011, FR-012, FR-014)
-- [ ] T028 Implement `rn::run<R: PlatformRenderer>(renderer) -> Result<(), RnError>` in `rn/src/lib.rs` — guards main-thread, drains `update_sender` receiver each tick, delegates to `renderer.run_event_loop()`
+- [X] T014 Define `NodeId`, `ComponentKind`, `Props` (`PropKey`, `PropValue`), `Component`, `ComponentTree` in `rn/src/component.rs` per data-model.md
+- [X] T015 [P] Define `Event`, `EventKind`, `EventPayload`, `HandlerId` in `rn/src/event.rs` per data-model.md
+- [X] T016 Define `Operation` enum (Create/Update/Delete/Reorder) and `Changeset` struct in `rn/src/reconciler.rs` per data-model.md
+- [X] T017 Define `PlatformRenderer` trait (`apply`, `run_event_loop`) in `rn/src/renderer.rs` per contracts/public-api.md
+- [X] T018 Define `RnError` (with `WrongThread` variant), `RenderError` (with `WrongThread` variant), `ReconcileError` in `rn/src/error.rs` per contracts/public-api.md (FR-012)
+- [X] T019 Implement `Reconciler` struct with `previous: Option<ComponentTree>` and `node_map` in `rn/src/reconciler.rs`; implement `reconcile(&mut self, next: ComponentTree) -> Result<Changeset, ReconcileError>` using position-based identity heuristic (research.md: Reconciler Algorithm)
+- [X] T020 Implement explicit key support in `Reconciler::reconcile` — detect keyed nodes, emit `Reorder` instead of Delete+Create when key matches a sibling in `rn/src/reconciler.rs`
+- [X] T021 [P] Implement `compute_layout(tree: &ComponentTree) -> LayoutResult` using `taffy` in `rn-layout/src/lib.rs`; `LayoutResult` maps `NodeId` to absolute pixel rect
+- [X] T022 Implement `MainThreadGuard` in `rn/src/thread.rs` — captures main-thread id on first init via `std::thread::current().id()`, exposes `check() -> Result<(), RnError>` returning `WrongThread` from any other thread (FR-011, FR-012)
+- [X] T023 Implement global handler registry in `rn/src/lib.rs` using `OnceLock<Mutex<HashMap<HandlerId, Box<dyn Fn(Event) + Send + 'static>>>>`; expose `rn::on(id, handler)` — thread-safe registration (FR-013 contract)
+- [X] T024 Implement panic-safe dispatch helper `dispatch_handler(id, event)` in `rn/src/lib.rs` — wraps call in `std::panic::catch_unwind(AssertUnwindSafe(…))`; on panic, logs via `log::error!("handler {id:?} panicked: {payload}")` and continues (FR-013)
+- [X] T025 Implement builder API (`rn::window()`, `rn::label()`, `rn::button()`, `rn::text_input()`, `rn::vstack()`, `rn::hstack()`, `rn::keyed()`) in `rn/src/lib.rs` per contracts/public-api.md
+- [X] T026 Implement `rn::update_sender<M>() -> crossbeam_channel::Sender<M>` and matching main-loop drain in `rn/src/lib.rs` (FR-011)
+- [X] T027 Implement `rn::render<R: PlatformRenderer>(renderer, tree) -> Result<(), RnError>` in `rn/src/lib.rs` — first calls `MainThreadGuard::check()?`, then reconciler, then `renderer.apply`; emits `log::trace!` for timing and `log::debug!` for changeset op counts (FR-011, FR-012, FR-014)
+- [X] T028 Implement `rn::run<R: PlatformRenderer>(renderer) -> Result<(), RnError>` in `rn/src/lib.rs` — guards main-thread, drains `update_sender` receiver each tick, delegates to `renderer.run_event_loop()`
 
 **Checkpoint**: `cargo check -p rn` and `cargo check -p rn-layout` pass clean. Threading
 guard rejects off-main calls. Handler panics are caught and logged. Foundation ready.
@@ -91,8 +91,8 @@ x86_64-pc-windows-msvc` and `cargo check --target x86_64-unknown-linux-gnu` pass
 - [ ] T033 [P] [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::TextInput` — create `NSTextField` (editable) in `rn-macos/src/renderer.rs`
 - [ ] T034 [P] [US1] Implement `MacosRenderer::apply_create()` for `ComponentKind::LayoutContainer` — create `NSView` container, invoke `rn-layout` to get rects, set subview frames in `rn-macos/src/renderer.rs`
 - [ ] T035 [US1] Implement `MacosRenderer::run_event_loop()` — start `NSApplication::run()` main loop, drain `crossbeam-channel` receiver each tick, dispatch events via `rn::dispatch_handler` (panic-safe) in `rn-macos/src/renderer.rs`
-- [ ] T036 [P] [US1] Stub `WindowsRenderer` — implement `PlatformRenderer` trait with no-op `apply()` returning `Ok(())` and `run_event_loop()` returning `Err(RenderError::OsError("windows backend not implemented in v0.1"))` in `rn-windows/src/renderer.rs`
-- [ ] T037 [P] [US1] Stub `LinuxRenderer` — implement `PlatformRenderer` trait with no-op `apply()` returning `Ok(())` and `run_event_loop()` returning `Err(RenderError::OsError("linux backend not implemented in v0.1"))` in `rn-linux/src/renderer.rs`
+- [X] T036 [P] [US1] Stub `WindowsRenderer` — implement `PlatformRenderer` trait with no-op `apply()` returning `Ok(())` and `run_event_loop()` returning `Err(RenderError::OsError("windows backend not implemented in v0.1"))` in `rn-windows/src/renderer.rs`
+- [X] T037 [P] [US1] Stub `LinuxRenderer` — implement `PlatformRenderer` trait with no-op `apply()` returning `Ok(())` and `run_event_loop()` returning `Err(RenderError::OsError("linux backend not implemented in v0.1"))` in `rn-linux/src/renderer.rs`
 - [ ] T038 [US1] Implement `examples/hello-world/src/main.rs` — `env_logger::init()`, construct `ComponentTree` with Window > VStack > [Label("Hello, World!"), Button("Click me")]; call `rn::render` then `rn::run`
 - [ ] T039 [US1] Verify `cargo run --example hello-world --features rn/macos` produces a visible native macOS window; inspect with Accessibility Inspector; confirm AXWindow + AXStaticText + AXButton roles
 
@@ -112,13 +112,13 @@ headlessly (no display server).
 
 ### Implementation for User Story 2
 
-- [ ] T040 [US2] Implement prop-level diffing in `Reconciler::reconcile` — for nodes present in both old and new tree at same position with same kind, emit `Operation::Update` containing only props whose values differ in `rn/src/reconciler.rs`; emit nothing if all props identical
+- [X] T040 [US2] Implement prop-level diffing in `Reconciler::reconcile` — for nodes present in both old and new tree at same position with same kind, emit `Operation::Update` containing only props whose values differ in `rn/src/reconciler.rs`; emit nothing if all props identical
 - [ ] T041 [US2] Implement render coalescing in `rn::run` main loop — if multiple `update_sender` messages arrive in the same event-loop tick, drain all and apply only the final tree to the reconciler in `rn/src/lib.rs` (spec Edge Cases: "state changes faster than event loop", analyze G1)
 - [ ] T042 [US2] Implement `MacosRenderer::apply_update()` — for each `Operation::Update`, look up native handle by `NodeId`, apply only changed props (e.g. set `NSTextField.stringValue` for `PropKey::Text`) without destroying/recreating the control in `rn-macos/src/renderer.rs`
 - [ ] T043 [P] [US2] Implement `MacosRenderer::apply_delete()` — remove native control from parent view and release handle from `node_map` in `rn-macos/src/renderer.rs`
 - [ ] T044 [P] [US2] Implement `MacosRenderer::apply_reorder()` — reorder subviews in parent `NSView` per `Operation::Reorder` child_order in `rn-macos/src/renderer.rs`
 - [ ] T045 [US2] Implement `examples/counter/src/main.rs` — state struct with `count: u32`; Increment button handler sends an `Increment` message via `rn::update_sender`; main loop drains, increments state, calls `rn::render` with new tree; label shows "Count: {n}"
-- [ ] T046 [P] [US2] Implement headless reconciler tests in `tests/reconciler/tests.rs`:
+- [X] T046 [P] [US2] Implement headless reconciler tests in `tests/reconciler/tests.rs`:
   - `test_no_change_produces_empty_changeset`
   - `test_prop_change_produces_update_only`
   - `test_node_removal_produces_delete`
@@ -126,7 +126,7 @@ headlessly (no display server).
   - `test_keyed_reorder_produces_reorder_not_delete_create`
   - `test_render_off_main_thread_returns_wrong_thread` (FR-012)
   - `test_handler_panic_is_caught_and_logged` (FR-013; uses `log` test adapter)
-- [ ] T047 [US2] Run `cargo test -p rn --test reconciler` and confirm all 7 tests pass headlessly
+- [X] T047 [US2] Run `cargo test -p rn --test reconciler` and confirm all 7 tests pass headlessly
 
 **Checkpoint**: US1 + US2 both independently functional. Counter updates without
 flicker. Reconciler test suite passes without display server, including thread and
@@ -145,7 +145,7 @@ namespace. Events arrive as `rn::event::Event`, never as platform types.
 ### Implementation for User Story 3
 
 - [ ] T048 [US3] Audit `rn/src/lib.rs` public exports — confirm no `pub use` of any type from `objc2`, `windows`, or `gtk4` crates; fix any leaks found
-- [ ] T049 [P] [US3] Add `#![deny(unreachable_pub)]` to `rn/src/lib.rs` and review all `pub` items to ensure only intended API surface is exported
+- [X] T049 [P] [US3] Add `#![deny(unreachable_pub)]` to `rn/src/lib.rs` and review all `pub` items to ensure only intended API surface is exported
 - [ ] T050 [P] [US3] Add `#![deny(unused_extern_crates)]` to `examples/hello-world/src/main.rs` and `examples/counter/src/main.rs`; confirm both compile without warnings
 - [ ] T051 [US3] Run `cargo tree -p hello-world --edges normal` and `cargo tree -p counter --edges normal`; confirm `objc2`, `windows`, `gtk4` do NOT appear in consumer direct deps; document result in `specs/001-core-framework/quickstart.md` Validation 3 section
 - [ ] T052 [P] [US3] Verify event type in counter handler is `rn::event::Event` — add compile-time type assertion `let _: rn::event::Event = e;` in `examples/counter/src/main.rs`
@@ -158,7 +158,7 @@ namespace. Events arrive as `rn::event::Event`, never as platform types.
 
 **Purpose**: Benchmarks, docs, metadata, final validation.
 
-- [ ] T053 Add `rn/benches/reconciler.rs` using `criterion` dev-dep — benchmark `Reconciler::reconcile` on a 500-node tree; assert p95 < 8ms on local hardware (constitution Principle IV, analyze C1)
+- [X] T053 Add `rn/benches/reconciler.rs` using `criterion` dev-dep — benchmark `Reconciler::reconcile` on a 500-node tree; assert p95 < 8ms on local hardware (constitution Principle IV, analyze C1)
 - [ ] T054 Run `cargo bench -p rn` and record result in `docs/benchmarks.md`; fail if p95 ≥ 8ms on reference hardware
 - [ ] T055 [P] Create `docs/backend-status.md` — table of macOS/Windows/Linux widget coverage per widget type with target milestone for Windows/Linux parity (constitution dev-workflow requirement, analyze U2)
 - [ ] T056 [P] Write `README.md` at repo root — product name (Rust Native / `rn`), elevator pitch (declarative cross-platform native UI, React Native model for Rust), quickstart snippet from hello-world, platform support table, link to `specs/001-core-framework/quickstart.md`; include glossary line: "**Rust Native** is the product; **`rn`** is the crate." (analyze D1)

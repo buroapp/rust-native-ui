@@ -1,0 +1,3 @@
+# Project-wide clippy configuration.
+# Lints are declared crate-level in each crate's src/lib.rs so cargo clippy
+# picks them up without needing feature flags.
