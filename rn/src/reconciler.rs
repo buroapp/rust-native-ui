@@ -164,6 +164,8 @@ fn props_equal(a: &PropValue, b: &PropValue) -> bool {
         (PropValue::Bool(x), PropValue::Bool(y)) => x == y,
         (PropValue::F32(x), PropValue::F32(y)) => x.to_bits() == y.to_bits(),
         (PropValue::HandlerRef(x), PropValue::HandlerRef(y)) => x == y,
+        (PropValue::StringList(x), PropValue::StringList(y)) => x == y,
+        (PropValue::Color(x), PropValue::Color(y)) => x == y,
         _ => false,
     }
 }
@@ -174,6 +176,8 @@ fn prop_reset_value(reference: &PropValue) -> PropValue {
         PropValue::Bool(_) => PropValue::Bool(false),
         PropValue::F32(_) => PropValue::F32(0.0),
         PropValue::HandlerRef(id) => PropValue::HandlerRef(*id),
+        PropValue::StringList(_) => PropValue::StringList(Vec::new()),
+        PropValue::Color(_) => PropValue::Color(rn_core::ColorValue::rgb(0, 0, 0)),
     }
 }
 

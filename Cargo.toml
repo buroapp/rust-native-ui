@@ -10,6 +10,7 @@ members = [
     "examples/hello-world",
     "examples/counter",
     "examples/gallery",
+    "examples/showcase",
 ]
 
 [workspace.package]
@@ -41,8 +42,27 @@ objc2-app-kit = { version = "0.2", features = [
     "NSGraphics",
     "NSEvent",
     "NSColor",
+    "NSColorWell",
     "NSText",
     "NSCell",
+    "NSSlider",
+    "NSSliderCell",
+    "NSProgressIndicator",
+    "NSScrollView",
+    "NSScroller",
+    "NSPopUpButton",
+    "NSPopUpButtonCell",
+    "NSMenu",
+    "NSMenuItem",
+    "NSDatePicker",
+    "NSDatePickerCell",
+    "NSImageView",
+    "NSImage",
+    "NSStepper",
+    "NSStepperCell",
+    "NSTextView",
+    "NSBox",
+    "NSMatrix",
 ] }
 objc2-foundation = { version = "0.2", features = [
     "NSString",

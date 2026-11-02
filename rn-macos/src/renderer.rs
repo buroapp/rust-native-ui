@@ -27,17 +27,20 @@ use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{declare_class, msg_send_id, mutability, sel, ClassType, DeclaredClass};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSBezelStyle, NSButton,
-    NSControlTextEditingDelegate, NSTextField, NSTextFieldDelegate, NSView, NSWindow,
-    NSWindowDelegate, NSWindowStyleMask,
+    NSColor, NSColorWell, NSControlTextEditingDelegate, NSDatePicker,
+    NSDatePickerStyle, NSImageView, NSPopUpButton, NSProgressIndicator,
+    NSScrollView, NSSlider, NSTextField, NSTextFieldDelegate, NSTextView, NSStepper,
+    NSView, NSWindow, NSWindowDelegate, NSWindowStyleMask, NSBox, NSBoxType,
+    NSImage,
 };
 use objc2_foundation::{
-    MainThreadMarker, NSNotification, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize,
+    MainThreadMarker, NSDate, NSNotification, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize,
     NSString, NSTimer,
 };
 
 use rn_core::{
-    ApplyBridge, Axis, Changeset, ComponentKind, Event, EventKind, EventPayload, HandlerId, NodeId,
-    Operation, PlatformRenderer, PropKey, PropValue, Props, RenderError,
+    ApplyBridge, Axis, Changeset, ColorValue, ComponentKind, Event, EventKind, EventPayload,
+    HandlerId, NodeId, Operation, PlatformRenderer, PropKey, PropValue, Props, RenderError,
 };
 use rn_layout::{compute_layout, LayoutAxis, LayoutNodeId, LayoutSpec, Rect};
 
@@ -51,6 +54,18 @@ enum NativeHandle {
     Label(Retained<NSTextField>),
     Button(Retained<NSButton>),
     TextInput(Retained<NSTextField>),
+    // New widget types
+    Checkbox(Retained<NSButton>),
+    Slider(Retained<NSSlider>),
+    ProgressBar(Retained<NSProgressIndicator>),
+    Separator(Retained<NSBox>),
+    TextArea(Retained<NSScrollView>),  // NSScrollView wrapping NSTextView
+    Dropdown(Retained<NSPopUpButton>),
+    Image(Retained<NSImageView>),
+    Stepper(Retained<NSView>),         // NSView wrapping NSStepper + NSTextField
+    ColorWell(Retained<NSColorWell>),
+    DatePicker(Retained<NSDatePicker>),
+    RadioGroup(Retained<NSView>),      // NSView wrapping NSMatrix of radio buttons
 }
 
 impl NativeHandle {
@@ -61,6 +76,17 @@ impl NativeHandle {
             NativeHandle::Label(v) => Some(v),
             NativeHandle::Button(v) => Some(v),
             NativeHandle::TextInput(v) => Some(v),
+            NativeHandle::Checkbox(v) => Some(v),
+            NativeHandle::Slider(v) => Some(v),
+            NativeHandle::ProgressBar(v) => Some(v),
+            NativeHandle::Separator(v) => Some(v),
+            NativeHandle::TextArea(v) => Some(v),
+            NativeHandle::Dropdown(v) => Some(v),
+            NativeHandle::Image(v) => Some(v),
+            NativeHandle::Stepper(v) => Some(v),
+            NativeHandle::ColorWell(v) => Some(v),
+            NativeHandle::DatePicker(v) => Some(v),
+            NativeHandle::RadioGroup(v) => Some(v),
         }
     }
 }
@@ -397,6 +423,336 @@ fn create_node(
                 .insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
+
+        // ------------------------------------------------------------------
+        // Checkbox (NSButton, switch style)
+        // ------------------------------------------------------------------
+        ComponentKind::Checkbox => {
+            let text = string_prop(&props, PropKey::Text, "");
+            let ns_text = NSString::from_str(&text);
+            let btn: Retained<NSButton> = unsafe {
+                NSButton::checkboxWithTitle_target_action(&ns_text, None, None, mtm)
+            };
+            let checked = bool_prop(&props, PropKey::Checked, false);
+            unsafe { btn.setState(if checked { 1 } else { 0 }) };
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnChange) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    btn.setTarget(Some(obj));
+                    btn.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &btn);
+            state.nodes.insert(node_id, NativeHandle::Checkbox(btn));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // Slider (NSSlider)
+        // ------------------------------------------------------------------
+        ComponentKind::Slider => {
+            let min = f32_prop(&props, PropKey::Min, 0.0);
+            let max = f32_prop(&props, PropKey::Max, 100.0);
+            let val = f32_prop(&props, PropKey::Value, min);
+            let slider: Retained<NSSlider> = unsafe {
+                NSSlider::sliderWithValue_minValue_maxValue_target_action(
+                    val as f64,
+                    min as f64,
+                    max as f64,
+                    None,
+                    None,
+                    mtm,
+                )
+            };
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnChange) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    slider.setTarget(Some(obj));
+                    slider.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &slider);
+            state.nodes.insert(node_id, NativeHandle::Slider(slider));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // ProgressBar (NSProgressIndicator, determinate)
+        // ------------------------------------------------------------------
+        ComponentKind::ProgressBar => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 20.0));
+            let progress: Retained<NSProgressIndicator> = unsafe {
+                NSProgressIndicator::initWithFrame(mtm.alloc(), frame)
+            };
+            let min = f32_prop(&props, PropKey::Min, 0.0);
+            let max = f32_prop(&props, PropKey::Max, 100.0);
+            let val = f32_prop(&props, PropKey::Value, 0.0);
+            unsafe {
+                progress.setIndeterminate(false);
+                progress.setMinValue(min as f64);
+                progress.setMaxValue(max as f64);
+                progress.setDoubleValue(val as f64);
+            }
+            attach_to_parent(state, parent_id, &progress);
+            state.nodes.insert(node_id, NativeHandle::ProgressBar(progress));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // Separator (NSBox, separator style)
+        // ------------------------------------------------------------------
+        ComponentKind::Separator => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 8.0));
+            let sep: Retained<NSBox> = unsafe { NSBox::initWithFrame(mtm.alloc(), frame) };
+            unsafe { sep.setBoxType(NSBoxType::NSBoxSeparator) };
+            attach_to_parent(state, parent_id, &sep);
+            state.nodes.insert(node_id, NativeHandle::Separator(sep));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // TextArea (NSScrollView + NSTextView)
+        // ------------------------------------------------------------------
+        ComponentKind::TextArea => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(300.0, 100.0));
+            let scroll = unsafe { NSScrollView::initWithFrame(mtm.alloc(), frame) };
+            let text_view = unsafe { NSTextView::initWithFrame(mtm.alloc(), frame) };
+            let text = string_prop(&props, PropKey::Text, "");
+            let ns_text = NSString::from_str(&text);
+            unsafe {
+                text_view.setString(&ns_text);
+                scroll.setDocumentView(Some(&text_view));
+                scroll.setHasVerticalScroller(true);
+            }
+            // Note: NSTextView uses NSTextViewDelegate, not NSTextFieldDelegate.
+            // OnChange for TextArea is handled via a periodic poll in a future version.
+            attach_to_parent(state, parent_id, &scroll);
+            state.nodes.insert(node_id, NativeHandle::TextArea(scroll));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // Dropdown (NSPopUpButton)
+        // ------------------------------------------------------------------
+        ComponentKind::Dropdown => {
+            let popup: Retained<NSPopUpButton> = unsafe {
+                NSPopUpButton::initWithFrame_pullsDown(
+                    mtm.alloc(),
+                    NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(180.0, 26.0)),
+                    false,
+                )
+            };
+            if let Some(PropValue::StringList(items)) = props.get(&PropKey::Options) {
+                for item in items {
+                    let ns = NSString::from_str(item);
+                    unsafe { popup.addItemWithTitle(&ns) };
+                }
+            }
+            let idx = f32_prop(&props, PropKey::SelectedIndex, 0.0) as usize;
+            unsafe { popup.selectItemAtIndex(idx as isize) };
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnChange) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    popup.setTarget(Some(obj));
+                    popup.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &popup);
+            state.nodes.insert(node_id, NativeHandle::Dropdown(popup));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // Image (NSImageView with SF Symbol)
+        // ------------------------------------------------------------------
+        ComponentKind::Image => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(32.0, 32.0));
+            let image_view: Retained<NSImageView> = unsafe {
+                NSImageView::initWithFrame(mtm.alloc(), frame)
+            };
+            if let Some(PropValue::String(name)) = props.get(&PropKey::ImageName) {
+                let ns_name = NSString::from_str(name);
+                if let Some(img) = unsafe { NSImage::imageNamed(&ns_name) } {
+                    unsafe { image_view.setImage(Some(&img)) };
+                }
+            }
+            attach_to_parent(state, parent_id, &image_view);
+            state.nodes.insert(node_id, NativeHandle::Image(image_view));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // Stepper (NSView holding NSStepper + NSTextField label)
+        // ------------------------------------------------------------------
+        ComponentKind::Stepper => {
+            let container_frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(120.0, 26.0));
+            let container: Retained<NSView> = unsafe {
+                NSView::initWithFrame(mtm.alloc(), container_frame)
+            };
+            let val = f32_prop(&props, PropKey::Value, 0.0);
+            let min = f32_prop(&props, PropKey::Min, 0.0);
+            let max = f32_prop(&props, PropKey::Max, 100.0);
+            let step = f32_prop(&props, PropKey::Step, 1.0);
+            // Value label (right-aligned)
+            let label_frame = NSRect::new(NSPoint::new(0.0, 2.0), NSSize::new(70.0, 22.0));
+            let label: Retained<NSTextField> = unsafe {
+                NSTextField::labelWithString(&NSString::from_str(&format!("{val:.0}")), mtm)
+            };
+            unsafe { label.setFrame(label_frame) };
+            // NSStepper
+            let step_frame = NSRect::new(NSPoint::new(74.0, 0.0), NSSize::new(46.0, 26.0));
+            let stepper: Retained<NSStepper> = unsafe {
+                NSStepper::initWithFrame(mtm.alloc(), step_frame)
+            };
+            unsafe {
+                stepper.setMinValue(min as f64);
+                stepper.setMaxValue(max as f64);
+                stepper.setDoubleValue(val as f64);
+                stepper.setIncrement(step as f64);
+                stepper.setValueWraps(false);
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnChange) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    stepper.setTarget(Some(obj));
+                    stepper.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            unsafe {
+                container.addSubview(&label);
+                container.addSubview(&stepper);
+            }
+            attach_to_parent(state, parent_id, &container);
+            state.nodes.insert(node_id, NativeHandle::Stepper(container));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // ColorWell (NSColorWell)
+        // ------------------------------------------------------------------
+        ComponentKind::ColorWell => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(46.0, 26.0));
+            let well: Retained<NSColorWell> = unsafe {
+                NSColorWell::initWithFrame(mtm.alloc(), frame)
+            };
+            if let Some(PropValue::Color(ColorValue { r, g, b, a })) = props.get(&PropKey::Color) {
+                let color = unsafe {
+                    NSColor::colorWithRed_green_blue_alpha(
+                        *r as f64 / 255.0,
+                        *g as f64 / 255.0,
+                        *b as f64 / 255.0,
+                        *a as f64 / 255.0,
+                    )
+                };
+                unsafe { well.setColor(&color) };
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnChange) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    well.setTarget(Some(obj));
+                    well.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &well);
+            state.nodes.insert(node_id, NativeHandle::ColorWell(well));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // DatePicker (NSDatePicker, compact style)
+        // ------------------------------------------------------------------
+        ComponentKind::DatePicker => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(180.0, 26.0));
+            let dp: Retained<NSDatePicker> = unsafe {
+                NSDatePicker::initWithFrame(mtm.alloc(), frame)
+            };
+            unsafe {
+                dp.setDatePickerStyle(NSDatePickerStyle::TextField);
+                dp.setDateValue(&NSDate::now());
+            }
+            attach_to_parent(state, parent_id, &dp);
+            state.nodes.insert(node_id, NativeHandle::DatePicker(dp));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // RadioGroup (NSView holding individual NSButton radio buttons)
+        // ------------------------------------------------------------------
+        ComponentKind::RadioGroup => {
+            let options: Vec<String> = if let Some(PropValue::StringList(opts)) =
+                props.get(&PropKey::Options)
+            {
+                opts.clone()
+            } else {
+                vec![]
+            };
+            let selected = f32_prop(&props, PropKey::SelectedIndex, 0.0) as i32;
+            let button_h: f32 = 20.0;
+            let gap: f32 = 4.0;
+            let total_h = (options.len() as f32) * (button_h + gap);
+            let frame = NSRect::new(
+                NSPoint::new(0.0, 0.0),
+                NSSize::new(180.0, total_h as f64),
+            );
+            let container: Retained<NSView> = unsafe {
+                NSView::initWithFrame(mtm.alloc(), frame)
+            };
+            for (i, opt) in options.iter().enumerate() {
+                let ns = NSString::from_str(opt);
+                let btn: Retained<NSButton> = unsafe {
+                    NSButton::radioButtonWithTitle_target_action(&ns, None, None, mtm)
+                };
+                let y = total_h - (i as f32 + 1.0) * (button_h + gap);
+                let btn_frame = NSRect::new(
+                    NSPoint::new(0.0, y as f64),
+                    NSSize::new(180.0, button_h as f64),
+                );
+                unsafe {
+                    btn.setFrame(btn_frame);
+                    btn.setState(if i as i32 == selected { 1 } else { 0 });
+                    container.addSubview(&btn);
+                }
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnChange) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                let count = unsafe { container.subviews().count() };
+                for i in 0..count {
+                    let subview = unsafe { container.subviews().objectAtIndex(i) };
+                    // All subviews added above are NSButton — raw cast is safe.
+                    let btn_ref: &NSButton = unsafe { &*(subview.as_ref() as *const NSView as *const NSButton) };
+                    unsafe {
+                        let obj: &AnyObject = &target;
+                        btn_ref.setTarget(Some(obj));
+                        btn_ref.setAction(Some(sel!(fire:)));
+                    }
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &container);
+            state.nodes.insert(node_id, NativeHandle::RadioGroup(container));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
     }
     Ok(())
 }
@@ -605,6 +961,24 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::Label => (None, Some(20.0)),
         ComponentKind::Button => (Some(120.0), Some(32.0)),
         ComponentKind::TextInput => (Some(200.0), Some(24.0)),
+        ComponentKind::Checkbox => (None, Some(22.0)),
+        ComponentKind::Slider => (Some(200.0), Some(24.0)),
+        ComponentKind::ProgressBar => (Some(200.0), Some(20.0)),
+        ComponentKind::Separator => (None, Some(8.0)),
+        ComponentKind::TextArea => (None, Some(100.0)),
+        ComponentKind::Dropdown => (Some(180.0), Some(26.0)),
+        ComponentKind::Image => (Some(32.0), Some(32.0)),
+        ComponentKind::Stepper => (Some(120.0), Some(26.0)),
+        ComponentKind::ColorWell => (Some(46.0), Some(26.0)),
+        ComponentKind::DatePicker => (Some(180.0), Some(26.0)),
+        ComponentKind::RadioGroup => {
+            let options_count = shadow
+                .props
+                .get(&PropKey::Options)
+                .and_then(|v| if let PropValue::StringList(l) = v { Some(l.len()) } else { None })
+                .unwrap_or(0);
+            (Some(180.0), Some((options_count as f32) * 24.0))
+        }
         _ => (
             f32_opt(&shadow.props, PropKey::Width),
             f32_opt(&shadow.props, PropKey::Height),
@@ -614,7 +988,9 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
     // collapse to zero in hstack layouts where other fixed-width siblings
     // compete for space.
     let min_width = match shadow.kind {
-        ComponentKind::Label => Some(f32_opt(&shadow.props, PropKey::MinWidth).unwrap_or(60.0)),
+        ComponentKind::Label | ComponentKind::Checkbox => {
+            Some(f32_opt(&shadow.props, PropKey::MinWidth).unwrap_or(60.0))
+        }
         _ => f32_opt(&shadow.props, PropKey::MinWidth),
     };
     let children = shadow
@@ -684,6 +1060,13 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
 // ---------------------------------------------------------------------------
 // Prop helpers
 // ---------------------------------------------------------------------------
+
+fn bool_prop(props: &Props, key: PropKey, default: bool) -> bool {
+    match props.get(&key) {
+        Some(PropValue::Bool(v)) => *v,
+        _ => default,
+    }
+}
 
 fn f32_prop(props: &Props, key: PropKey, default: f32) -> f32 {
     match props.get(&key) {

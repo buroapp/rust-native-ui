@@ -6,7 +6,7 @@
 //! builder live here in `rn` (backends never see the virtual tree — only
 //! the `Changeset` the reconciler produces).
 
-pub use rn_core::{Axis, ComponentKind, HandlerId, NodeId, PropKey, PropValue, Props};
+pub use rn_core::{Axis, ColorValue, ComponentKind, HandlerId, NodeId, PropKey, PropValue, Props};
 
 use std::collections::HashMap;
 
@@ -90,6 +90,38 @@ impl ComponentBuilder {
 
     pub fn on_close(self, id: HandlerId) -> Self {
         self.prop(PropKey::OnClose, PropValue::HandlerRef(id))
+    }
+
+    pub fn checked(self, checked: bool) -> Self {
+        self.prop(PropKey::Checked, PropValue::Bool(checked))
+    }
+
+    pub fn min(self, v: f32) -> Self {
+        self.prop(PropKey::Min, PropValue::F32(v))
+    }
+
+    pub fn max(self, v: f32) -> Self {
+        self.prop(PropKey::Max, PropValue::F32(v))
+    }
+
+    pub fn step(self, v: f32) -> Self {
+        self.prop(PropKey::Step, PropValue::F32(v))
+    }
+
+    pub fn selected_index(self, idx: i32) -> Self {
+        self.prop(PropKey::SelectedIndex, PropValue::F32(idx as f32))
+    }
+
+    pub fn image_name(self, name: impl Into<String>) -> Self {
+        self.prop(PropKey::ImageName, PropValue::String(name.into()))
+    }
+
+    pub fn color(self, c: ColorValue) -> Self {
+        self.prop(PropKey::Color, PropValue::Color(c))
+    }
+
+    pub fn date_value(self, date: impl Into<String>) -> Self {
+        self.prop(PropKey::DateValue, PropValue::String(date.into()))
     }
 
     pub fn child(mut self, child: impl Into<Component>) -> Self {

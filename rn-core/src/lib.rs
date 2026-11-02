@@ -1,8 +1,4 @@
 //! Core types shared between `rn` and its platform backend crates.
-//!
-//! This crate exists so backend crates can implement the `PlatformRenderer`
-//! trait without introducing a circular dependency on the top-level `rn`
-//! crate.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -37,6 +33,18 @@ pub enum ComponentKind {
     Button,
     TextInput,
     LayoutContainer(Axis),
+    // New in v0.2
+    Checkbox,        // NSButton (switch style) — Bool state
+    Slider,          // NSSlider — F32 value in [min, max]
+    ProgressBar,     // NSProgressIndicator (determinate)
+    Separator,       // NSBox separator
+    TextArea,        // NSTextView (multi-line, scrolled)
+    Dropdown,        // NSPopUpButton — index into StringList options
+    Image,           // NSImageView — SF Symbol / named image
+    Stepper,         // NSStepper + value label
+    ColorWell,       // NSColorWell — RGBA via ColorValue
+    DatePicker,      // NSDatePicker — date string (ISO 8601)
+    RadioGroup,      // NSMatrix of NSButtonCell (radio) — index-based
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -47,6 +55,7 @@ pub enum Axis {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PropKey {
+    // Layout / visibility
     Text,
     Enabled,
     Visible,
@@ -58,9 +67,26 @@ pub enum PropKey {
     Gap,
     Title,
     Placeholder,
+    // Handlers
     OnPress,
     OnChange,
     OnClose,
+    // New: numeric range & value
+    Value,       // F32 — slider/progress/stepper current value
+    Min,         // F32
+    Max,         // F32
+    Step,        // F32 — stepper increment
+    // New: boolean state
+    Checked,     // Bool — checkbox / radio checked state
+    // New: selection
+    SelectedIndex, // F32 (cast to i32) — dropdown / radio group
+    Options,       // StringList — dropdown / radio group items
+    // New: media / appearance
+    ImageName,   // String — SF Symbol name for NSImageView
+    // New: color
+    Color,       // ColorValue (r, g, b, a) × 255
+    // New: date
+    DateValue,   // String (ISO 8601: "YYYY-MM-DD")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,12 +105,32 @@ impl Default for HandlerId {
     }
 }
 
+/// RGBA color with each channel in 0–255.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ColorValue {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
+
+impl ColorValue {
+    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b, a: 255 }
+    }
+    pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropValue {
     String(String),
     Bool(bool),
     F32(f32),
     HandlerRef(HandlerId),
+    StringList(Vec<String>),  // options list for Dropdown / RadioGroup
+    Color(ColorValue),
 }
 
 pub type Props = HashMap<PropKey, PropValue>;
@@ -173,6 +219,9 @@ pub enum EventPayload {
     None,
     Text(String),
     Key(KeyCode),
+    Float(f32),           // slider, stepper, progress value
+    Index(i32),           // dropdown / radio group selected index
+    Color(ColorValue),    // color well selection
 }
 
 #[derive(Debug, Clone)]
@@ -207,7 +256,7 @@ impl std::fmt::Display for RenderError {
 impl std::error::Error for RenderError {}
 
 // ---------------------------------------------------------------------------
-// PlatformRenderer trait — the single seam between framework and backends
+// PlatformRenderer trait
 // ---------------------------------------------------------------------------
 
 pub trait PlatformRenderer {
@@ -216,25 +265,18 @@ pub trait PlatformRenderer {
 }
 
 // ---------------------------------------------------------------------------
-// Dispatch bridge — lets a backend crate (which depends only on rn-core) hand
-// native-UI events to the top-level `rn` crate's handler registry without a
-// circular dependency. `rn` registers its `dispatch_handler` at startup via
-// `set_dispatch_bridge`; backends call `dispatch_event` on each native event.
+// Dispatch bridge
 // ---------------------------------------------------------------------------
 
 type DispatchFn = fn(Event);
 
 static DISPATCH: OnceLock<DispatchFn> = OnceLock::new();
 
-/// Install the event dispatcher. Called once by `rn` during initialisation;
-/// idempotent — the first registered function wins.
-#[doc(hidden)] // Internal: not part of the public API contract
+#[doc(hidden)]
 pub fn set_dispatch_bridge(f: DispatchFn) {
     let _ = DISPATCH.set(f);
 }
 
-/// Backends call this to hand a native event to the framework. If no bridge
-/// has been installed yet (e.g. tests without `rn`), the event is dropped.
 pub fn dispatch_event(event: Event) {
     if let Some(f) = DISPATCH.get() {
         f(event);
@@ -242,36 +284,26 @@ pub fn dispatch_event(event: Event) {
 }
 
 // ---------------------------------------------------------------------------
-// Tick bridge — lets a backend crate drain the host's pending state updates
-// from `rn::drain_updates()` once per event-loop tick without depending on
-// `rn`. `rn::run` installs a trampoline that calls back into the host closure.
+// Tick bridge
 // ---------------------------------------------------------------------------
 
 type TickFn = fn();
 
 static TICK: OnceLock<TickFn> = OnceLock::new();
 
-/// Install the per-tick trampoline. Idempotent.
-#[doc(hidden)] // Internal: not part of the public API contract
+#[doc(hidden)]
 pub fn set_tick_bridge(f: TickFn) {
     let _ = TICK.set(f);
 }
 
-/// Backends invoke this from their event loop timer; a no-op if nothing is
-/// registered yet.
 pub fn tick() {
     if let Some(f) = TICK.get() {
-        f();
+        f()
     }
 }
 
 // ---------------------------------------------------------------------------
-// Apply bridge — the backend owns the renderer's native handles behind
-// `&mut self`, but re-renders can originate from the event loop tick where
-// the renderer is already borrowed by the event-loop driver. The backend
-// installs an `ApplyBridge` that funnels a `Changeset` back into its internal
-// state through interior mutability; `rn::rerender` uses this to apply
-// changesets produced by the per-tick view function.
+// Apply bridge
 // ---------------------------------------------------------------------------
 
 pub trait ApplyBridge: Send + Sync {
@@ -280,15 +312,11 @@ pub trait ApplyBridge: Send + Sync {
 
 static APPLY: OnceLock<Box<dyn ApplyBridge>> = OnceLock::new();
 
-/// Install the apply bridge. Idempotent — first registration wins.
-#[doc(hidden)] // Internal: not part of the public API contract
+#[doc(hidden)]
 pub fn set_apply_bridge(bridge: Box<dyn ApplyBridge>) {
     let _ = APPLY.set(bridge);
 }
 
-/// Framework-internal: apply a changeset via whatever bridge the backend
-/// installed. Returns `Err(RenderError::OsError(..))` if no bridge is
-/// installed.
 pub fn apply_via_bridge(changeset: Changeset) -> Result<(), RenderError> {
     match APPLY.get() {
         Some(bridge) => bridge.apply(changeset),

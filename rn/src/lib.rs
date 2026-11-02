@@ -23,7 +23,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
-pub use component::{Axis, Component, ComponentBuilder, ComponentKind, ComponentTree, PropKey, PropValue, Props};
+pub use component::{Axis, ColorValue, Component, ComponentBuilder, ComponentKind, ComponentTree, PropKey, PropValue, Props};
 pub use error::{ReconcileError, RenderError, RnError};
 pub use event::{Event, EventKind, EventPayload, HandlerId, KeyCode};
 pub use reconciler::{Changeset, Operation, Reconciler};
@@ -88,6 +88,81 @@ pub fn hstack() -> ComponentBuilder {
 pub fn keyed(key: impl Into<String>, mut component: Component) -> Component {
     component.key = Some(key.into());
     component
+}
+
+/// Build a `Checkbox` component.
+pub fn checkbox(label: impl Into<String>, checked: bool) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Checkbox)
+        .prop(PropKey::Text, PropValue::String(label.into()))
+        .prop(PropKey::Checked, PropValue::Bool(checked))
+}
+
+/// Build a `Slider` component.
+pub fn slider(value: f32, min: f32, max: f32) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Slider)
+        .prop(PropKey::Value, PropValue::F32(value))
+        .prop(PropKey::Min, PropValue::F32(min))
+        .prop(PropKey::Max, PropValue::F32(max))
+}
+
+/// Build a `ProgressBar` component (determinate, 0.0–100.0).
+pub fn progress_bar(value: f32) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::ProgressBar)
+        .prop(PropKey::Value, PropValue::F32(value.clamp(0.0, 100.0)))
+        .prop(PropKey::Min, PropValue::F32(0.0))
+        .prop(PropKey::Max, PropValue::F32(100.0))
+}
+
+/// Build a horizontal `Separator` line.
+pub fn separator() -> Component {
+    ComponentBuilder::new(ComponentKind::Separator).build()
+}
+
+/// Build a `TextArea` (multi-line text input).
+pub fn text_area(text: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::TextArea)
+        .prop(PropKey::Text, PropValue::String(text.into()))
+}
+
+/// Build a `Dropdown` (pop-up button).
+pub fn dropdown(options: Vec<String>, selected: i32) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Dropdown)
+        .prop(PropKey::Options, PropValue::StringList(options))
+        .prop(PropKey::SelectedIndex, PropValue::F32(selected as f32))
+}
+
+/// Build an `Image` from an SF Symbol name (e.g. `"star.fill"`).
+pub fn image(name: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Image)
+        .prop(PropKey::ImageName, PropValue::String(name.into()))
+}
+
+/// Build a `Stepper` with a linked value label.
+pub fn stepper(value: f32, min: f32, max: f32, step: f32) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Stepper)
+        .prop(PropKey::Value, PropValue::F32(value))
+        .prop(PropKey::Min, PropValue::F32(min))
+        .prop(PropKey::Max, PropValue::F32(max))
+        .prop(PropKey::Step, PropValue::F32(step))
+}
+
+/// Build a `ColorWell`.
+pub fn color_well(color: ColorValue) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::ColorWell)
+        .prop(PropKey::Color, PropValue::Color(color))
+}
+
+/// Build a `DatePicker` (ISO 8601 date string).
+pub fn date_picker(date: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::DatePicker)
+        .prop(PropKey::DateValue, PropValue::String(date.into()))
+}
+
+/// Build a `RadioGroup`.
+pub fn radio_group(options: Vec<String>, selected: i32) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::RadioGroup)
+        .prop(PropKey::Options, PropValue::StringList(options))
+        .prop(PropKey::SelectedIndex, PropValue::F32(selected as f32))
 }
 
 // ---------------------------------------------------------------------------
