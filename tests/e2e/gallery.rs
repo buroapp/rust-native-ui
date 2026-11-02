@@ -394,8 +394,188 @@ fn no_op_render_produces_empty_changeset() {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// 8. Layout — verify LayoutResult has non-zero rects for all widget types
 // ---------------------------------------------------------------------------
+
+#[test]
+fn layout_result_has_nonzero_rects_for_all_widgets() {
+    use rn_layout::{compute_layout, LayoutAxis, LayoutNodeId, LayoutSpec, Rect};
+
+    // Mirror the gallery spec: vstack(padding=20, gap=12) containing an
+    // hstack, label, label, hstack(3 buttons), button — approximating the
+    // real component tree. Use the same fixed sizes the renderer assigns.
+    let spec = LayoutSpec {
+        id: LayoutNodeId(1), // vstack
+        axis: LayoutAxis::Vertical,
+        padding: 20.0,
+        gap: 12.0,
+        fixed_width: None,
+        fixed_height: None,
+        min_width: None,
+        min_height: None,
+        children: vec![
+            // hstack: label("Name:") + TextInput
+            LayoutSpec {
+                id: LayoutNodeId(2),
+                axis: LayoutAxis::Horizontal,
+                padding: 0.0,
+                gap: 8.0,
+                fixed_width: None,
+                fixed_height: None,
+                min_width: None,
+                min_height: None,
+                children: vec![
+                    LayoutSpec {
+                        id: LayoutNodeId(3), // "Name:" label
+                        axis: LayoutAxis::None,
+                        padding: 0.0,
+                        gap: 0.0,
+                        fixed_width: None,
+                        fixed_height: Some(20.0),
+                        min_width: Some(60.0), // renderer assigns 60px min to labels
+                        min_height: None,
+                        children: vec![],
+                    },
+                    LayoutSpec {
+                        id: LayoutNodeId(4), // TextInput
+                        axis: LayoutAxis::None,
+                        padding: 0.0,
+                        gap: 0.0,
+                        fixed_width: Some(200.0),
+                        fixed_height: Some(24.0),
+                        min_width: None,
+                        min_height: None,
+                        children: vec![],
+                    },
+                ],
+            },
+            // greeting label
+            LayoutSpec {
+                id: LayoutNodeId(5),
+                axis: LayoutAxis::None,
+                padding: 0.0,
+                gap: 0.0,
+                fixed_width: None,
+                fixed_height: Some(20.0),
+                min_width: Some(60.0),
+                min_height: None,
+                children: vec![],
+            },
+            // clicks label
+            LayoutSpec {
+                id: LayoutNodeId(6),
+                axis: LayoutAxis::None,
+                padding: 0.0,
+                gap: 0.0,
+                fixed_width: None,
+                fixed_height: Some(20.0),
+                min_width: Some(60.0),
+                min_height: None,
+                children: vec![],
+            },
+            // hstack: 3 buttons
+            LayoutSpec {
+                id: LayoutNodeId(7),
+                axis: LayoutAxis::Horizontal,
+                padding: 0.0,
+                gap: 8.0,
+                fixed_width: None,
+                fixed_height: None,
+                min_width: None,
+                min_height: None,
+                children: vec![
+                    LayoutSpec {
+                        id: LayoutNodeId(8),
+                        axis: LayoutAxis::None,
+                        padding: 0.0,
+                        gap: 0.0,
+                        fixed_width: Some(120.0),
+                        fixed_height: Some(32.0),
+                        min_width: None,
+                        min_height: None,
+                        children: vec![],
+                    },
+                    LayoutSpec {
+                        id: LayoutNodeId(9),
+                        axis: LayoutAxis::None,
+                        padding: 0.0,
+                        gap: 0.0,
+                        fixed_width: Some(120.0),
+                        fixed_height: Some(32.0),
+                        min_width: None,
+                        min_height: None,
+                        children: vec![],
+                    },
+                    LayoutSpec {
+                        id: LayoutNodeId(10),
+                        axis: LayoutAxis::None,
+                        padding: 0.0,
+                        gap: 0.0,
+                        fixed_width: Some(120.0),
+                        fixed_height: Some(32.0),
+                        min_width: None,
+                        min_height: None,
+                        children: vec![],
+                    },
+                ],
+            },
+            // Toggle greeting button
+            LayoutSpec {
+                id: LayoutNodeId(11),
+                axis: LayoutAxis::None,
+                padding: 0.0,
+                gap: 0.0,
+                fixed_width: Some(120.0),
+                fixed_height: Some(32.0),
+                min_width: None,
+                min_height: None,
+                children: vec![],
+            },
+        ],
+    };
+
+    let container = Rect { x: 0.0, y: 0.0, width: 420.0, height: 320.0 };
+    let result = compute_layout(&spec, container);
+
+    // Every node must have a rect.
+    for id in 1..=11u64 {
+        let lid = LayoutNodeId(id);
+        let rect = result
+            .get(lid)
+            .unwrap_or_else(|| panic!("no rect for node {id}"));
+        assert!(rect.width > 0.0, "node {id} has zero width");
+        assert!(rect.height > 0.0, "node {id} has zero height");
+    }
+
+    // Leaf widgets inside a nested container (hstack children) must have
+    // y offsets that DIFFER from the root vstack's y — proving they are
+    // positioned relative to the content view, not each other.
+    let vstack_rect = result.get(LayoutNodeId(1)).unwrap();
+    let label_rect = result.get(LayoutNodeId(5)).unwrap();
+    assert!(
+        label_rect.y > vstack_rect.y,
+        "greeting label y ({}) should be > vstack y ({}) — layout must place it inside with padding+gap",
+        label_rect.y, vstack_rect.y
+    );
+
+    // TextInput must be right of the "Name:" label within the hstack.
+    let name_label_rect = result.get(LayoutNodeId(3)).unwrap();
+    let text_input_rect = result.get(LayoutNodeId(4)).unwrap();
+    assert!(
+        text_input_rect.x > name_label_rect.x,
+        "TextInput x ({}) must be > Name label x ({}) in hstack",
+        text_input_rect.x, name_label_rect.x
+    );
+
+    // The three buttons in the second hstack must have the same y but
+    // increasing x values.
+    let b1 = result.get(LayoutNodeId(8)).unwrap();
+    let b2 = result.get(LayoutNodeId(9)).unwrap();
+    let b3 = result.get(LayoutNodeId(10)).unwrap();
+    assert!((b1.y - b2.y).abs() < 1.0, "buttons in hstack should share y");
+    assert!(b2.x > b1.x, "button 2 x ({}) must be > button 1 x ({})", b2.x, b1.x);
+    assert!(b3.x > b2.x, "button 3 x ({}) must be > button 2 x ({})", b3.x, b2.x);
+}
 
 fn count_ops(cs: &Changeset) -> (usize, usize, usize, usize) {
     let (mut c, mut u, mut d, mut r) = (0, 0, 0, 0);

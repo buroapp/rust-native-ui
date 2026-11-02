@@ -541,12 +541,19 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
 fn relayout_window(state: &RendererState, window_id: NodeId) {
     let (content_rect, content_view) = {
         let Some(NativeHandle::Window(window)) = state.nodes.get(&window_id) else {
+            log::warn!("relayout_window: no Window handle for {:?}", window_id);
             return;
         };
         let Some(cv) = window.contentView() else {
+            log::warn!("relayout_window: no contentView for {:?}", window_id);
             return;
         };
         let frame = cv.frame();
+        log::debug!(
+            "relayout_window: contentView frame = {}x{}",
+            frame.size.width,
+            frame.size.height
+        );
         (
             Rect {
                 x: 0.0,
@@ -558,15 +565,29 @@ fn relayout_window(state: &RendererState, window_id: NodeId) {
         )
     };
     let Some(window_shadow) = state.shadow.get(&window_id) else {
+        log::warn!("relayout_window: no shadow for window {:?}", window_id);
         return;
     };
+    log::debug!(
+        "relayout_window: window shadow has {} children",
+        window_shadow.children.len()
+    );
     let Some(root_child) = window_shadow.children.first().copied() else {
+        log::warn!("relayout_window: window shadow has no children — layout skipped");
         return;
     };
     let Some(spec) = build_spec(state, root_child) else {
+        log::warn!("relayout_window: build_spec returned None for root_child {:?}", root_child);
         return;
     };
+    log::debug!(
+        "relayout_window: spec has {} children, computing layout in {}x{}",
+        spec.children.len(),
+        content_rect.width,
+        content_rect.height
+    );
     let result = compute_layout(&spec, content_rect);
+    log::debug!("relayout_window: {} rects computed", result.rects.len());
     apply_rects(state, &content_view, &result);
 }
 
@@ -579,7 +600,6 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
     };
     let padding = f32_prop(&shadow.props, PropKey::Padding, 0.0);
     let gap = f32_prop(&shadow.props, PropKey::Gap, 0.0);
-    let min_width = f32_opt(&shadow.props, PropKey::MinWidth);
     let min_height = f32_opt(&shadow.props, PropKey::MinHeight);
     let (fixed_width, fixed_height) = match shadow.kind {
         ComponentKind::Label => (None, Some(20.0)),
@@ -589,6 +609,13 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
             f32_opt(&shadow.props, PropKey::Width),
             f32_opt(&shadow.props, PropKey::Height),
         ),
+    };
+    // Labels with no explicit width use a minimum of 60px so they don't
+    // collapse to zero in hstack layouts where other fixed-width siblings
+    // compete for space.
+    let min_width = match shadow.kind {
+        ComponentKind::Label => Some(f32_opt(&shadow.props, PropKey::MinWidth).unwrap_or(60.0)),
+        _ => f32_opt(&shadow.props, PropKey::MinWidth),
     };
     let children = shadow
         .children
@@ -618,11 +645,48 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
         let Some(view) = handle.as_view() else {
             continue;
         };
-        // Flip from taffy (top-left origin) to AppKit (bottom-left origin).
-        let y = content_height - rect.y - rect.height;
+
+        // `rect` is absolute (relative to the layout root = content view).
+        // AppKit NSView frames are relative to the superview's coordinate space.
+        // For views whose superview IS the content view (LayoutContainers directly
+        // inside the window), the rect is already in the right space.
+        // For leaf views (Label/Button/TextInput) whose superview is a nested
+        // LayoutContainer, we must subtract the parent's absolute origin.
+        let parent_origin = state
+            .shadow
+            .get(&node_id)
+            .and_then(|sn| sn.parent)
+            .and_then(|pid| result.rects.get(&rn_layout::LayoutNodeId(pid.0)))
+            .map(|pr| (pr.x, pr.y))
+            .unwrap_or((0.0, 0.0));
+
+        // Rect relative to immediate superview.
+        let local_x = rect.x - parent_origin.0;
+        let local_y = rect.y - parent_origin.1;
+
+        // Flip y from taffy (top-left) to AppKit (bottom-left).
+        // The superview's height is either the content view's or the parent rect's.
+        let superview_height = if parent_origin.0 == 0.0 && parent_origin.1 == 0.0 {
+            content_height
+        } else {
+            state
+                .shadow
+                .get(&node_id)
+                .and_then(|sn| sn.parent)
+                .and_then(|pid| result.rects.get(&rn_layout::LayoutNodeId(pid.0)))
+                .map(|pr| pr.height)
+                .unwrap_or(content_height)
+        };
+
+        let flipped_y = superview_height - local_y - rect.height;
         let ns = NSRect::new(
-            NSPoint::new(rect.x as f64, y as f64),
+            NSPoint::new(local_x as f64, flipped_y as f64),
             NSSize::new(rect.width as f64, rect.height as f64),
+        );
+        log::trace!(
+            "setFrame {:?} → x={:.0} y={:.0} w={:.0} h={:.0} (abs:{:.0},{:.0} parent:{:.0},{:.0})",
+            node_id, local_x, flipped_y, rect.width, rect.height,
+            rect.x, rect.y, parent_origin.0, parent_origin.1
         );
         unsafe { view.setFrame(ns) };
     }
