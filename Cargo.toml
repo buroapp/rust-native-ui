@@ -9,6 +9,7 @@ members = [
     "rn-linux",
     "examples/hello-world",
     "examples/counter",
+    "examples/gallery",
 ]
 
 [workspace.package]
