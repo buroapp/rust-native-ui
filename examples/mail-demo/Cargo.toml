@@ -1,0 +1,14 @@
+[package]
+name = "mail-demo"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+rn = { path = "../../rn" }
+env_logger = { workspace = true }
+
+[features]
+macos = ["rn/macos"]
+windows = ["rn/windows"]
+linux = ["rn/linux"]

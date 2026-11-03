@@ -11,6 +11,8 @@ members = [
     "examples/counter",
     "examples/gallery",
     "examples/showcase",
+    "examples/settings-demo",
+    "examples/mail-demo",
 ]
 
 [workspace.package]

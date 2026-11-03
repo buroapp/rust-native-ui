@@ -28,7 +28,10 @@ pub use error::{ReconcileError, RenderError, RnError};
 pub use event::{Event, EventKind, EventPayload, HandlerId, KeyCode};
 pub use reconciler::{Changeset, Operation, Reconciler};
 pub use renderer::PlatformRenderer;
-pub use rn_core::NodeId;
+pub use rn_core::{
+    ColorToken, FontToken, Insets, Point, RadiusToken, ScrollEvent,
+    SpacingToken, StyledSpan, ToolbarAction, NodeId,
+};
 
 /// Platform backend bindings. Enabled by the `macos`, `windows`, or `linux`
 /// feature flag. Only the renderer type is re-exported; no `objc2`/`windows`/
@@ -392,4 +395,143 @@ pub fn update_sender() -> crossbeam_channel::Sender<UpdateMessage> {
 pub fn drain_updates() -> Vec<UpdateMessage> {
     let (_, rx) = update_channel();
     rx.try_iter().collect()
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 builder functions (002-react-native-parity)
+// ---------------------------------------------------------------------------
+
+/// Start building a `ScrollView` component.
+pub fn scroll_view() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::ScrollView)
+}
+
+/// Start building a `FlatList` component.
+pub fn flat_list() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::FlatList)
+}
+
+/// Start building a `TouchableOpacity` component.
+pub fn touchable_opacity(on_press: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::TouchableOpacity)
+        .prop(PropKey::OnPress, PropValue::HandlerRef(on_press))
+        .prop(PropKey::PressOpacity, PropValue::F32(0.4))
+}
+
+/// Start building a `SafeAreaView` component.
+pub fn safe_area_view() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::SafeAreaView)
+}
+
+/// Start building an `ActivityIndicator` component.
+pub fn activity_indicator() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::ActivityIndicator)
+        .prop(PropKey::Visible, PropValue::Bool(true))
+}
+
+/// Start building a `Modal` component.
+pub fn modal(visible: bool) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Modal)
+        .prop(PropKey::ModalVisible, PropValue::Bool(visible))
+}
+
+/// Start building a `Popover` component anchored to `anchor_id`.
+pub fn popover(anchor_id: NodeId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Popover)
+        .prop(PropKey::AnchorId, PropValue::NodeRef(anchor_id))
+}
+
+/// Start building a `RichText` component from styled spans.
+pub fn rich_text(spans: Vec<StyledSpan>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::RichText)
+        .prop(PropKey::TextSpans, PropValue::Spans(spans))
+        .prop(PropKey::TextWrap, PropValue::Bool(true))
+}
+
+/// Build a simple single-span `RichText` component.
+pub fn text_plain(s: impl Into<String>) -> ComponentBuilder {
+    rich_text(vec![StyledSpan::new(s)])
+}
+
+/// Start building a `Switch` component.
+pub fn rn_switch(value: bool, on_change: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Switch)
+        .prop(PropKey::SwitchValue, PropValue::Bool(value))
+        .prop(PropKey::OnChange, PropValue::HandlerRef(on_change))
+}
+
+/// Start building a `StatusBar` component.
+pub fn status_bar() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::StatusBar)
+        .prop(PropKey::Visible, PropValue::Bool(true))
+}
+
+/// Start building a `Card` component.
+pub fn card() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Card)
+}
+
+/// Start building a `Badge` component.
+pub fn badge(label: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Badge)
+        .prop(PropKey::BadgeLabel, PropValue::String(label.into()))
+}
+
+/// Start building a `Skeleton` placeholder.
+pub fn skeleton(width: f32, height: f32) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Skeleton)
+        .prop(PropKey::Width, PropValue::F32(width))
+        .prop(PropKey::Height, PropValue::F32(height))
+}
+
+/// Start building a `SegmentedControl` component.
+pub fn segmented_control(
+    options: Vec<String>,
+    selected_index: i32,
+    on_change: HandlerId,
+) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::SegmentedControl)
+        .prop(PropKey::Options, PropValue::StringList(options))
+        .prop(PropKey::SelectedIndex, PropValue::F32(selected_index as f32))
+        .prop(PropKey::OnChange, PropValue::HandlerRef(on_change))
+}
+
+/// Start building a `SearchBar` component.
+pub fn search_bar(placeholder: impl Into<String>, on_change: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::SearchBar)
+        .prop(PropKey::Placeholder, PropValue::String(placeholder.into()))
+        .prop(PropKey::OnChange, PropValue::HandlerRef(on_change))
+}
+
+/// Start building a `Sidebar` component.
+pub fn sidebar() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Sidebar)
+        .prop(PropKey::SidebarWidth, PropValue::F32(220.0))
+        .prop(PropKey::SidebarMinWidth, PropValue::F32(160.0))
+        .prop(PropKey::SidebarMaxWidth, PropValue::F32(320.0))
+}
+
+/// Start building a `SidebarItem` component.
+pub fn sidebar_item(label: impl Into<String>, on_select: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::SidebarItem)
+        .prop(PropKey::Text, PropValue::String(label.into()))
+        .prop(PropKey::OnSelect, PropValue::HandlerRef(on_select))
+        .prop(PropKey::Selected, PropValue::Bool(false))
+}
+
+/// Start building a `GroupedSection` component.
+pub fn grouped_section() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::GroupedSection)
+}
+
+/// Start building a `SplitView` component.
+pub fn split_view() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::SplitView)
+        .prop(PropKey::DividerWidth, PropValue::F32(1.0))
+}
+
+/// Start building a `Toolbar` component.
+pub fn toolbar(actions: Vec<ToolbarAction>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Toolbar)
+        .prop(PropKey::ToolbarActions, PropValue::ToolbarActions(actions))
 }

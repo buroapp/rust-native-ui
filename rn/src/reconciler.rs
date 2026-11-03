@@ -178,6 +178,15 @@ fn prop_reset_value(reference: &PropValue) -> PropValue {
         PropValue::HandlerRef(id) => PropValue::HandlerRef(*id),
         PropValue::StringList(_) => PropValue::StringList(Vec::new()),
         PropValue::Color(_) => PropValue::Color(rn_core::ColorValue::rgb(0, 0, 0)),
+        // Phase 2 — return a clone of the reference as a reasonable reset
+        PropValue::NodeRef(id) => PropValue::NodeRef(*id),
+        PropValue::Spans(_) => PropValue::Spans(Vec::new()),
+        PropValue::ToolbarActions(_) => PropValue::ToolbarActions(Vec::new()),
+        PropValue::F32List(_) => PropValue::F32List(Vec::new()),
+        PropValue::ColorToken(t) => PropValue::ColorToken(*t),
+        PropValue::SpacingToken(t) => PropValue::SpacingToken(*t),
+        PropValue::RadiusToken(t) => PropValue::RadiusToken(*t),
+        PropValue::FontToken(t) => PropValue::FontToken(*t),
     }
 }
 

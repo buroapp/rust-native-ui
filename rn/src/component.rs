@@ -6,7 +6,11 @@
 //! builder live here in `rn` (backends never see the virtual tree — only
 //! the `Changeset` the reconciler produces).
 
-pub use rn_core::{Axis, ColorValue, ComponentKind, HandlerId, NodeId, PropKey, PropValue, Props};
+pub use rn_core::{
+    Axis, ColorValue, ComponentKind, HandlerId, NodeId, PropKey, PropValue, Props,
+    ColorToken, FontToken, Insets, Point, RadiusToken, ScrollEvent,
+    SpacingToken, StyledSpan, ToolbarAction,
+};
 
 use std::collections::HashMap;
 

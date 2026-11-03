@@ -26,6 +26,7 @@ impl NodeId {
 // Component kinds + props
 // ---------------------------------------------------------------------------
 
+/// Widget kinds understood by the framework.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ComponentKind {
     Window,
@@ -33,18 +34,39 @@ pub enum ComponentKind {
     Button,
     TextInput,
     LayoutContainer(Axis),
-    // New in v0.2
-    Checkbox,        // NSButton (switch style) — Bool state
-    Slider,          // NSSlider — F32 value in [min, max]
-    ProgressBar,     // NSProgressIndicator (determinate)
-    Separator,       // NSBox separator
-    TextArea,        // NSTextView (multi-line, scrolled)
-    Dropdown,        // NSPopUpButton — index into StringList options
-    Image,           // NSImageView — SF Symbol / named image
-    Stepper,         // NSStepper + value label
-    ColorWell,       // NSColorWell — RGBA via ColorValue
-    DatePicker,      // NSDatePicker — date string (ISO 8601)
-    RadioGroup,      // NSMatrix of NSButtonCell (radio) — index-based
+    // Phase 1 (v0.1)
+    Checkbox,
+    Slider,
+    ProgressBar,
+    Separator,
+    TextArea,
+    Dropdown,
+    Image,
+    Stepper,
+    ColorWell,
+    DatePicker,
+    RadioGroup,
+    // Phase 2 (v0.2) — RN parity + design system
+    ScrollView,
+    FlatList,
+    TouchableOpacity,
+    SafeAreaView,
+    ActivityIndicator,
+    Modal,
+    Popover,
+    RichText,
+    Card,
+    Badge,
+    Skeleton,
+    SegmentedControl,
+    SearchBar,
+    Sidebar,
+    SidebarItem,
+    GroupedSection,
+    SplitView,
+    Toolbar,
+    Switch,
+    StatusBar,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -71,22 +93,85 @@ pub enum PropKey {
     OnPress,
     OnChange,
     OnClose,
-    // New: numeric range & value
-    Value,       // F32 — slider/progress/stepper current value
-    Min,         // F32
-    Max,         // F32
-    Step,        // F32 — stepper increment
-    // New: boolean state
-    Checked,     // Bool — checkbox / radio checked state
-    // New: selection
-    SelectedIndex, // F32 (cast to i32) — dropdown / radio group
-    Options,       // StringList — dropdown / radio group items
-    // New: media / appearance
-    ImageName,   // String — SF Symbol name for NSImageView
-    // New: color
-    Color,       // ColorValue (r, g, b, a) × 255
-    // New: date
-    DateValue,   // String (ISO 8601: "YYYY-MM-DD")
+    // Numeric range & value
+    Value,
+    Min,
+    Max,
+    Step,
+    // Boolean state
+    Checked,
+    // Selection
+    SelectedIndex,
+    Options,
+    // Media / appearance
+    ImageName,
+    Color,
+    DateValue,
+    // Phase 2 — scroll
+    Direction,
+    Scrollable,
+    ContentOffset,
+    OnScroll,
+    // Phase 2 — flat list
+    ItemHeightFixed,
+    ItemHeightDynamic,
+    BufferRows,
+    EndReachThreshold,
+    OnEndReached,
+    // Phase 2 — touchable
+    PressOpacity,
+    StopBubbling,
+    // Phase 2 — activity indicator
+    IndicatorSize,
+    // Phase 2 — modal / popover
+    ModalVisible,
+    ModalPosition,
+    CloseOnBackdrop,
+    OnDismiss,
+    AnchorId,
+    // Phase 2 — rich text
+    TextSpans,
+    TextWrap,
+    TextAlign,
+    MaxLines,
+    // Phase 2 — design tokens
+    StylePadding,
+    StyleGap,
+    StyleRadius,
+    StyleBgColor,
+    StyleFgColor,
+    StyleFont,
+    StyleShadow,
+    StyleOpacity,
+    // Phase 2 — badge / skeleton
+    Variant,
+    BadgeLabel,
+    // Phase 2 — sidebar
+    SidebarWidth,
+    SidebarMinWidth,
+    SidebarMaxWidth,
+    Collapsed,
+    IconName,
+    Selected,
+    OnSelect,
+    SidebarBadge,
+    SectionTitle,
+    // Phase 2 — split view
+    SplitOrientation,
+    DividerWidth,
+    MinPaneSizes,
+    PaneSizes,
+    OnResize,
+    // Phase 2 — toolbar
+    ToolbarActions,
+    // Phase 2 — status bar
+    BackgroundColor,
+    // Phase 2 — search bar
+    SearchValue,
+    OnClear,
+    OnSubmit,
+    // Phase 2 — switch
+    SwitchValue,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -123,14 +208,182 @@ impl ColorValue {
     }
 }
 
+/// A typed value stored in a component's prop map.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropValue {
     String(String),
     Bool(bool),
     F32(f32),
     HandlerRef(HandlerId),
-    StringList(Vec<String>),  // options list for Dropdown / RadioGroup
+    StringList(Vec<String>),
     Color(ColorValue),
+    // Phase 2
+    NodeRef(NodeId),
+    Spans(Vec<StyledSpan>),
+    ToolbarActions(Vec<ToolbarAction>),
+    F32List(Vec<f32>),
+    ColorToken(ColorToken),
+    SpacingToken(SpacingToken),
+    RadiusToken(RadiusToken),
+    FontToken(FontToken),
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 auxiliary types
+// ---------------------------------------------------------------------------
+
+/// Semantic color tokens for the design system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ColorToken {
+    Primary,
+    Secondary,
+    Destructive,
+    Muted,
+    Background,
+    Foreground,
+    Card,
+    Border,
+    Success,
+    Warning,
+}
+
+/// Spacing scale values (px).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SpacingToken {
+    None,
+    Xs,   // 4
+    Sm,   // 8
+    Md,   // 12
+    Lg,   // 16
+    Xl,   // 20
+    Xxl,  // 24
+    Xxxl, // 32
+}
+
+impl SpacingToken {
+    pub fn px(self) -> f32 {
+        match self {
+            SpacingToken::None => 0.0,
+            SpacingToken::Xs   => 4.0,
+            SpacingToken::Sm   => 8.0,
+            SpacingToken::Md   => 12.0,
+            SpacingToken::Lg   => 16.0,
+            SpacingToken::Xl   => 20.0,
+            SpacingToken::Xxl  => 24.0,
+            SpacingToken::Xxxl => 32.0,
+        }
+    }
+}
+
+/// Border radius tokens (px).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RadiusToken {
+    None,
+    Sm,   // 2
+    Md,   // 4
+    Lg,   // 6
+    Xl,   // 8
+    Full, // 9999
+}
+
+impl RadiusToken {
+    pub fn px(self) -> f32 {
+        match self {
+            RadiusToken::None => 0.0,
+            RadiusToken::Sm   => 2.0,
+            RadiusToken::Md   => 4.0,
+            RadiusToken::Lg   => 6.0,
+            RadiusToken::Xl   => 8.0,
+            RadiusToken::Full => 9999.0,
+        }
+    }
+}
+
+/// Typography tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FontToken {
+    Body,
+    BodySm,
+    HeadingSm,
+    HeadingMd,
+    HeadingLg,
+    Mono,
+}
+
+/// A styled text span for use in `RichText` components.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StyledSpan {
+    pub text:      String,
+    pub bold:      bool,
+    pub italic:    bool,
+    pub underline: bool,
+    pub color:     Option<ColorToken>,
+    pub font:      Option<FontToken>,
+    pub font_size: Option<f32>,
+}
+
+impl StyledSpan {
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            bold: false,
+            italic: false,
+            underline: false,
+            color: None,
+            font: None,
+            font_size: None,
+        }
+    }
+    pub fn bold(mut self) -> Self { self.bold = true; self }
+    pub fn italic(mut self) -> Self { self.italic = true; self }
+    pub fn underline(mut self) -> Self { self.underline = true; self }
+    pub fn color(mut self, c: ColorToken) -> Self { self.color = Some(c); self }
+    pub fn font(mut self, f: FontToken) -> Self { self.font = Some(f); self }
+    pub fn size(mut self, px: f32) -> Self { self.font_size = Some(px); self }
+}
+
+/// A single action in a `Toolbar`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolbarAction {
+    pub id:        String,
+    pub label:     Option<String>,
+    pub icon_name: Option<String>,
+    pub handler:   HandlerId,
+    pub separator: bool,
+    pub enabled:   bool,
+}
+
+impl ToolbarAction {
+    pub fn new(id: impl Into<String>, handler: HandlerId) -> Self {
+        Self {
+            id: id.into(),
+            label: None,
+            icon_name: None,
+            handler,
+            separator: false,
+            enabled: true,
+        }
+    }
+    pub fn label(mut self, l: impl Into<String>) -> Self { self.label = Some(l.into()); self }
+    pub fn icon(mut self, name: impl Into<String>) -> Self { self.icon_name = Some(name.into()); self }
+    pub fn separator(mut self) -> Self { self.separator = true; self }
+    pub fn disabled(mut self) -> Self { self.enabled = false; self }
+}
+
+/// 2D point.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Point {
+    pub x: f32,
+    pub y: f32,
+}
+
+/// Edge insets.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Insets {
+    pub top:    f32,
+    pub right:  f32,
+    pub bottom: f32,
+    pub left:   f32,
 }
 
 pub type Props = HashMap<PropKey, PropValue>;
@@ -219,9 +472,25 @@ pub enum EventPayload {
     None,
     Text(String),
     Key(KeyCode),
-    Float(f32),           // slider, stepper, progress value
-    Index(i32),           // dropdown / radio group selected index
-    Color(ColorValue),    // color well selection
+    Float(f32),
+    Index(i32),
+    Color(ColorValue),
+    Bool(bool),
+    // Phase 2
+    Scroll(ScrollEvent),
+    Search(String),
+    Segment(i32),
+    SplitResize(Vec<f32>),
+    ToolbarAction(String),
+}
+
+/// Scroll position and velocity delivered with scroll events.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScrollEvent {
+    pub offset_x:   f32,
+    pub offset_y:   f32,
+    pub velocity_x: f32,
+    pub velocity_y: f32,
 }
 
 #[derive(Debug, Clone)]

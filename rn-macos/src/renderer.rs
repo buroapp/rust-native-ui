@@ -761,6 +761,39 @@ fn create_node(
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
+
+        // ------------------------------------------------------------------
+        // Phase 2 stubs — full AppKit implementations in subsequent tasks
+        // ------------------------------------------------------------------
+        ComponentKind::ScrollView
+        | ComponentKind::FlatList
+        | ComponentKind::TouchableOpacity
+        | ComponentKind::SafeAreaView
+        | ComponentKind::ActivityIndicator
+        | ComponentKind::Modal
+        | ComponentKind::Popover
+        | ComponentKind::RichText
+        | ComponentKind::Card
+        | ComponentKind::Badge
+        | ComponentKind::Skeleton
+        | ComponentKind::SegmentedControl
+        | ComponentKind::SearchBar
+        | ComponentKind::Sidebar
+        | ComponentKind::SidebarItem
+        | ComponentKind::GroupedSection
+        | ComponentKind::SplitView
+        | ComponentKind::Toolbar
+        | ComponentKind::Switch
+        | ComponentKind::StatusBar => {
+            // Placeholder: render as an empty NSView until the full
+            // implementation is added in the corresponding task.
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(10.0, 10.0));
+            let view: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
+            attach_to_parent(state, parent_id, &view);
+            state.nodes.insert(node_id, NativeHandle::View(view, ContainerInfo { axis: Axis::Vertical, padding: 0.0, gap: 0.0 }));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
     }
     Ok(())
 }
