@@ -1769,15 +1769,12 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         .collect();
 
     // flex_grow: fill available space when no fixed width/height is set.
-    // Used for containers that should expand to fill their parent (vstack
-    // content areas, GroupedSection, SearchBar, etc.)
     let flex_grow = match shadow.kind {
-        // Full-fill containers: always expand
+        // SafeAreaView and TouchableOpacity: always fill parent
+        ComponentKind::SafeAreaView | ComponentKind::TouchableOpacity => 1.0,
+        // Fill-width containers (no fixed_width): expand to fill horizontal space
         ComponentKind::LayoutContainer(_)
-        | ComponentKind::SafeAreaView
-        | ComponentKind::TouchableOpacity => 1.0,
-        // Fill-width containers (no fixed_width): expand horizontally
-        ComponentKind::GroupedSection
+        | ComponentKind::GroupedSection
         | ComponentKind::Card
         | ComponentKind::SearchBar
         | ComponentKind::TextArea
@@ -1786,7 +1783,6 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         | ComponentKind::RichText
         | ComponentKind::Toolbar
         | ComponentKind::Skeleton
-        | ComponentKind::Separator
             if fixed_width.is_none() => 1.0,
         _ => 0.0,
     };
