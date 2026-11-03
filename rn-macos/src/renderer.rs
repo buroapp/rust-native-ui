@@ -28,7 +28,7 @@ use objc2::{declare_class, msg_send_id, mutability, sel, ClassType, DeclaredClas
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSBezelStyle, NSButton,
     NSColor, NSColorWell, NSControlTextEditingDelegate, NSControlStateValueOff, NSControlStateValueOn,
-    NSDatePicker, NSDatePickerStyle, NSImageView, NSPopUpButton, NSProgressIndicator,
+    NSDatePicker, NSDatePickerStyle, NSImageView, NSLineBreakMode, NSPopUpButton, NSProgressIndicator,
     NSScrollView, NSSlider, NSTextField, NSTextFieldDelegate,
     NSTextView, NSStepper, NSView, NSWindow, NSWindowDelegate, NSWindowStyleMask,
     NSBox, NSBoxType, NSImage, NSSearchField, NSSegmentedControl, NSSwitch, NSSplitView,
@@ -1240,7 +1240,7 @@ fn create_node(
         }
 
         // ------------------------------------------------------------------
-        // SidebarItem — NSView row with label (FR-026)
+        // SidebarItem — Clickable row with native selection highlight (FR-026)
         // ------------------------------------------------------------------
         ComponentKind::SidebarItem => {
             let label_text = if let Some(PropValue::String(s)) = props.get(&PropKey::Text) {
@@ -1249,30 +1249,82 @@ fn create_node(
                 String::new()
             };
             let selected = bool_prop(&props, PropKey::Selected, false);
-            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 36.0));
-            let row: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
-            let tf_frame = NSRect::new(NSPoint::new(8.0, 8.0), NSSize::new(180.0, 20.0));
+
+            // Use NSBox as container — supports fillColor + cornerRadius natively
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(210.0, 32.0));
+            let row: Retained<NSBox> = unsafe {
+                let b = NSBox::initWithFrame(mtm.alloc(), frame);
+                b.setBoxType(NSBoxType::NSBoxCustom);
+                b.setCornerRadius(6.0);
+                b.setBorderWidth(0.0);
+                if selected {
+                    b.setFillColor(&NSColor::controlAccentColor());
+                } else {
+                    b.setFillColor(&NSColor::clearColor());
+                }
+                b
+            };
+
+            // Label — inset inside box
+            let tf_frame = NSRect::new(NSPoint::new(10.0, 7.0), NSSize::new(190.0, 18.0));
             let tf: Retained<NSTextField> = unsafe {
                 let t = NSTextField::initWithFrame(mtm.alloc(), tf_frame);
                 t.setEditable(false);
                 t.setBordered(false);
                 t.setDrawsBackground(false);
-                t.setStringValue(&NSString::from_str(&label_text));
+                let ns = NSString::from_str(&label_text);
+                t.setStringValue(&ns);
+                let size: f64 = 13.0;
+                let font = if selected {
+                    NSFont::boldSystemFontOfSize(size)
+                } else {
+                    NSFont::systemFontOfSize(size)
+                };
+                t.setFont(Some(&font));
+                if selected {
+                    t.setTextColor(Some(&NSColor::whiteColor()));
+                } else {
+                    t.setTextColor(Some(&NSColor::labelColor()));
+                }
+                t.setLineBreakMode(NSLineBreakMode(4)); // NSLineBreakByTruncatingTail
                 t
             };
             unsafe {
-                row.addSubview(&tf);
-                if selected {
-                    // Highlight selected item with background color
-                    row.setWantsLayer(false); // Let macOS handle default selection
+                if let Some(cv) = row.contentView() {
+                    cv.addSubview(&tf);
+                } else {
+                    row.addSubview(&tf);
                 }
             }
+
+            // Invisible NSButton overlay for click
             if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnSelect) {
-                // Wire a click via a gesture; use a ButtonTarget over the row view.
-                let _ = *h; // captured for future click-gesture wiring
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                let btn_frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(210.0, 32.0));
+                unsafe {
+                    let btn: Retained<NSButton> = NSButton::initWithFrame(mtm.alloc(), btn_frame);
+                    btn.setBezelStyle(NSBezelStyle::Automatic);
+                    btn.setBordered(false);
+                    btn.setTransparent(true);
+                    btn.setTitle(&NSString::from_str(""));
+                    let obj: &AnyObject = &target;
+                    btn.setTarget(Some(obj));
+                    btn.setAction(Some(sel!(fire:)));
+                    if let Some(cv) = row.contentView() {
+                        cv.addSubview(&btn);
+                    } else {
+                        row.addSubview(&btn);
+                    }
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
             }
-            attach_to_parent(state, parent_id, &row);
-            state.nodes.insert(node_id, NativeHandle::View(row, ContainerInfo { axis: Axis::Horizontal, padding: 8.0, gap: 8.0 }));
+
+            let row_as_view: Retained<NSView> = unsafe { Retained::cast(row) };
+            attach_to_parent(state, parent_id, &row_as_view);
+            state.nodes.insert(node_id, NativeHandle::View(
+                row_as_view,
+                ContainerInfo { axis: Axis::Horizontal, padding: 8.0, gap: 0.0 }
+            ));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
@@ -1456,6 +1508,15 @@ fn update_node(
                 }
             }
             (NativeHandle::SidebarWidget(_), PropKey::Selected) => {} // selection styling handled via SidebarItem
+            // SidebarItem selection: update NSBox fill color
+            // The row is stored as NativeHandle::View (NSBox cast to NSView).
+            // We update via the shadow prop — the reconciler will re-render with
+            // the new Selected value, rebuilding the row with correct colors.
+            (NativeHandle::View(_, _), PropKey::Selected) => {
+                // No direct NSBox cast available here — rely on full re-render.
+                // The view will be rebuilt with the correct fillColor on the next
+                // reconciler cycle (the shadow prop update below triggers it).
+            }
             _ => {}
         }
     }
