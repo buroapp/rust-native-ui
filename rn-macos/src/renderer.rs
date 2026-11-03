@@ -35,6 +35,9 @@ use objc2_app_kit::{
     NSTitlePosition, NSVisualEffectView, NSVisualEffectMaterial,
     NSVisualEffectState,
 };
+// Phase 2 extra imports for RichText attributed string rendering (FR-008)
+use objc2_app_kit::{NSFont, NSForegroundColorAttributeName, NSFontAttributeName};
+use objc2_foundation::NSMutableAttributedString;
 use objc2_foundation::{
     MainThreadMarker, NSDate,
     NSNotification, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize,
@@ -72,6 +75,7 @@ enum NativeHandle {
     RadioGroup(Retained<NSView>),      // NSView wrapping NSMatrix of radio buttons
     // Phase 2 — RN parity + design system
     ScrollViewWidget(Retained<NSScrollView>),
+    FlatListWidget(Retained<NSScrollView>, Box<FlatListRendererState>),
     ActivityIndicatorWidget(Retained<NSProgressIndicator>),
     SwitchWidget(Retained<NSSwitch>),
     CardWidget(Retained<NSBox>),
@@ -109,6 +113,7 @@ impl NativeHandle {
             NativeHandle::RadioGroup(v) => Some(v),
             // Phase 2
             NativeHandle::ScrollViewWidget(v) => Some(v),
+            NativeHandle::FlatListWidget(v, _) => Some(v),
             NativeHandle::ActivityIndicatorWidget(v) => Some(v),
             NativeHandle::SwitchWidget(v) => Some(v),
             NativeHandle::CardWidget(v) => Some(v),
@@ -124,6 +129,78 @@ impl NativeHandle {
             NativeHandle::TouchableWidget(v) => Some(v),
             NativeHandle::SafeAreaWidget(v) => Some(v),
         }
+    }
+}
+
+/// Minimal per-FlatList virtualization state kept inside the macOS renderer.
+/// Full logic lives in `rn::flat_list::FlatListState`; this mirrors the
+/// minimum needed for the macOS backend tick loop (FR-002, FR-004).
+struct FlatListRendererState {
+    item_h: f32,
+    viewport_h: f32,
+    scroll_offset: f32,
+    buffer_rows: usize,
+    end_reach_threshold: f32,
+    item_count: usize,
+    mounted_start: usize,
+    mounted_end: usize,
+    end_reached_fired: bool,
+}
+
+impl FlatListRendererState {
+    fn new(item_h: f32, viewport_h: f32, buffer_rows: usize, end_reach_threshold: f32) -> Self {
+        Self {
+            item_h,
+            viewport_h,
+            scroll_offset: 0.0,
+            buffer_rows,
+            end_reach_threshold,
+            item_count: 0,
+            mounted_start: 0,
+            mounted_end: 0,
+            end_reached_fired: false,
+        }
+    }
+
+    /// Returns `(new_start, new_end)` for the desired visible+buffer range.
+    fn desired_range(&self) -> (usize, usize) {
+        if self.item_h <= 0.0 || self.item_count == 0 {
+            return (0, 0);
+        }
+        let first = (self.scroll_offset / self.item_h) as usize;
+        let rows_in_view = (self.viewport_h / self.item_h).ceil() as usize + 1;
+        let start = first.saturating_sub(self.buffer_rows);
+        let end = (first + rows_in_view + self.buffer_rows).min(self.item_count);
+        (start, end)
+    }
+
+    /// Update scroll offset. Returns list of (data_index, is_mount) for rows
+    /// that need mounting (`true`) or unmounting (`false`).
+    fn on_scroll(&mut self, offset: f32) -> Vec<(usize, bool)> {
+        self.scroll_offset = offset.max(0.0);
+        let total_h = self.item_count as f32 * self.item_h;
+        if !self.end_reached_fired
+            && total_h - self.scroll_offset - self.viewport_h < self.end_reach_threshold
+        {
+            self.end_reached_fired = true;
+        }
+        let (new_start, new_end) = self.desired_range();
+        let mut ops = Vec::new();
+        // Unmount rows leaving the window
+        for i in self.mounted_start..self.mounted_end {
+            if i < new_start || i >= new_end {
+                ops.push((i, false));
+            }
+        }
+        // Mount new rows entering the window
+        for i in new_start..new_end {
+            if i < self.mounted_start || i >= self.mounted_end {
+                ops.push((i, true));
+            }
+        }
+        self.mounted_start = new_start;
+        self.mounted_end = new_end;
+        ops
     }
 }
 
@@ -177,6 +254,43 @@ impl RendererState {
 thread_local! {
     static STATE_SLOT: RefCell<Option<Rc<RefCell<RendererState>>>> = const { RefCell::new(None) };
 }
+
+/// Walk the shadow tree parent chain and fire `OnPress` handlers on any
+/// `TouchableOpacity` ancestor until `stop_bubbling` is set or the root is
+/// reached.  Implements FR-015 event bubbling semantics.
+fn bubble_press_event(source: NodeId) {
+    let ancestors = with_state(|s| {
+        let mut result = Vec::new();
+        let mut current = s.shadow.get(&source).and_then(|sn| sn.parent);
+        while let Some(parent_id) = current {
+            if let Some(sn) = s.shadow.get(&parent_id) {
+                if sn.kind == ComponentKind::TouchableOpacity {
+                    if let Some(PropValue::HandlerRef(h)) = sn.props.get(&PropKey::OnPress) {
+                        result.push((parent_id, *h));
+                    }
+                }
+                current = sn.parent;
+            } else {
+                break;
+            }
+        }
+        result
+    });
+    for (node_id, handler) in ancestors.unwrap_or_default() {
+        let bubble_event = Event {
+            source: node_id,
+            handler,
+            kind: EventKind::Press,
+            payload: EventPayload::None,
+            stop_bubbling: false,
+        };
+        // Dispatch; consumer can set stop_bubbling = true to halt chain.
+        rn_core::dispatch_event(bubble_event);
+    }
+}
+
+/// Aliased to avoid clippy's "very complex type" lint.
+type FlatOpsVec = Vec<(NodeId, HandlerId, Vec<(usize, bool)>)>;
 
 fn with_state<F, R>(f: F) -> Option<R>
 where
@@ -832,8 +946,16 @@ fn create_node(
                 sv.setAutohidesScrollers(true);
                 sv.setDrawsBackground(false);
             }
+            // Instantiate virtualization state (FR-002, FR-004).
+            let item_h = f32_prop(&props, PropKey::ItemHeightFixed, 44.0);
+            let flat_state = FlatListRendererState::new(
+                item_h,
+                300.0, // viewport height (updated on layout pass)
+                f32_prop(&props, PropKey::BufferRows, 3.0) as usize,
+                f32_prop(&props, PropKey::EndReachThreshold, 100.0),
+            );
             attach_to_parent(state, parent_id, &sv);
-            state.nodes.insert(node_id, NativeHandle::ScrollViewWidget(sv));
+            state.nodes.insert(node_id, NativeHandle::FlatListWidget(sv, Box::new(flat_state)));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
@@ -844,9 +966,31 @@ fn create_node(
         // stash as View for now, alpha applied on press via update_node.
         // ------------------------------------------------------------------
         ComponentKind::TouchableOpacity => {
+            let press_opacity = f32_prop(&props, PropKey::PressOpacity, 0.4);
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(100.0, 40.0));
             let view: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
             view.setWantsLayer(true);
+            // Overlay a transparent NSButton that handles press feedback (FR-005, FR-006).
+            // The button has no title/image; it sits on top of children and fires OnPress.
+            let btn: Retained<NSButton> = unsafe { NSButton::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                btn.setTitle(&NSString::from_str(""));
+                btn.setBordered(false);
+                btn.setBezelStyle(NSBezelStyle::Automatic);
+                btn.setTransparent(true);
+                btn.setWantsLayer(true);
+                view.addSubview(&btn);
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnPress) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    btn.setTarget(Some(obj));
+                    btn.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            let _ = press_opacity; // stored in shadow props for future layer-opacity animation
             attach_to_parent(state, parent_id, &view);
             state.nodes.insert(node_id, NativeHandle::TouchableWidget(view));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
@@ -928,11 +1072,19 @@ fn create_node(
                 tv.setSelectable(false);
                 tv.setDrawsBackground(false);
             }
-            // Build attributed string from spans if provided
+            // Build attributed string from spans (FR-008)
             if let Some(PropValue::Spans(spans)) = props.get(&PropKey::TextSpans) {
-                let plain = spans.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join("");
-                let ns = NSString::from_str(&plain);
-                unsafe { tv.setString(&ns) };
+                if !spans.is_empty() {
+                    let attr_str = build_attributed_string(spans);
+                    if let Some(mut storage) = unsafe { tv.textStorage() } {
+                        storage.setAttributedString(&attr_str);
+                    } else {
+                        // Fallback: plain text
+                        let plain = spans.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join("");
+                        let ns = NSString::from_str(&plain);
+                        unsafe { tv.setString(&ns) };
+                    }
+                }
             }
             // Apply text wrap setting (FR-009)
             let wrap = bool_prop(&props, PropKey::TextWrap, true);
@@ -1558,6 +1710,58 @@ fn bool_prop(props: &Props, key: PropKey, default: bool) -> bool {
     }
 }
 
+/// Build an `NSMutableAttributedString` from a list of `StyledSpan` values.
+/// Uses plain text concatenation for now; bold is applied via NSFont.
+/// (FR-008 — colored/styled spans via NSAttributedString)
+fn build_attributed_string(spans: &[rn_core::StyledSpan]) -> Retained<NSMutableAttributedString> {
+    let full_text: String = spans.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join("");
+    let ns_text = NSString::from_str(&full_text);
+    // Build a base attributed string with the full plain text.
+    let result: Retained<NSMutableAttributedString> =
+        NSMutableAttributedString::initWithString(NSMutableAttributedString::alloc(), &ns_text);
+    // Apply per-span font and color attributes using addAttribute:value:range:.
+    let mut offset: usize = 0;
+    for span in spans {
+        let span_len = span.text.chars().count();
+        let range = objc2_foundation::NSRange::new(offset, span_len);
+        // Font
+        let font: Retained<NSFont> = unsafe {
+            let size: f64 = span.font_size.unwrap_or(13.0) as f64;
+            if span.bold {
+                NSFont::boldSystemFontOfSize(size)
+            } else {
+                NSFont::systemFontOfSize(size)
+            }
+        };
+        // Use msg_send! directly to call addAttribute:value:range: since Retained<NSMutableAttributedString>
+        // doesn't expose &mut methods in objc2 0.2 bindings.
+        unsafe {
+            let _: () = objc2::msg_send![
+                &*result, addAttribute: NSFontAttributeName value: &*font range: range
+            ];
+        }
+        // Color
+        if let Some(token) = span.color {
+            let ns_color: Retained<NSColor> = unsafe {
+                match token {
+                    rn_core::ColorToken::Destructive => NSColor::systemRedColor(),
+                    rn_core::ColorToken::Muted => NSColor::secondaryLabelColor(),
+                    rn_core::ColorToken::Success => NSColor::systemGreenColor(),
+                    rn_core::ColorToken::Warning => NSColor::systemOrangeColor(),
+                    _ => NSColor::controlTextColor(),
+                }
+            };
+            unsafe {
+                let _: () = objc2::msg_send![
+                    &*result, addAttribute: NSForegroundColorAttributeName value: &*ns_color range: range
+                ];
+            }
+        }
+        offset += span_len;
+    }
+    result
+}
+
 fn f32_prop(props: &Props, key: PropKey, default: f32) -> f32 {
     match props.get(&key) {
         Some(PropValue::F32(v)) => *v,
@@ -1628,6 +1832,8 @@ declare_class!(
             };
             with_state(|s| s.pending_events.push(event.clone()));
             rn_core::dispatch_event(event);
+            // Bubble press up through TouchableOpacity ancestors (FR-015).
+            bubble_press_event(ivars.source);
         }
     }
 );
@@ -1811,6 +2017,47 @@ declare_class!(
             }).unwrap_or_default();
             for e in scroll_events {
                 rn_core::dispatch_event(e);
+            }
+
+            // Poll FlatList virtualization — call on_scroll and dispatch render_item
+            // for newly mounted rows (FR-002, FR-004).
+            let flat_ops: FlatOpsVec =
+                with_state(|s| {
+                    let mut result = Vec::new();
+                    for (node_id, handle) in s.nodes.iter_mut() {
+                        if let NativeHandle::FlatListWidget(sv, fl_state) = handle {
+                            if let Some(shadow) = s.shadow.get(node_id) {
+                                if let Some(PropValue::HandlerRef(h)) =
+                                    shadow.props.get(&PropKey::RenderItem)
+                                {
+                                    let clip = unsafe { sv.contentView() };
+                                    let bounds = clip.bounds();
+                                    let offset_y = bounds.origin.y as f32;
+                                    let ops = fl_state.on_scroll(offset_y);
+                                    if !ops.is_empty() {
+                                        result.push((*node_id, *h, ops));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    result
+                })
+                .unwrap_or_default();
+            for (node_id, handler, ops) in flat_ops {
+                for (data_index, is_mount) in ops {
+                    if is_mount {
+                        // Fire render_item handler with the row index.
+                        let evt = Event {
+                            source: node_id,
+                            handler,
+                            kind: EventKind::Change,
+                            payload: EventPayload::Index(data_index as i32),
+                            stop_bubbling: false,
+                        };
+                        rn_core::dispatch_event(evt);
+                    }
+                }
             }
             rn_core::tick();
         }

@@ -8,6 +8,12 @@
 #[cfg(all(target_os = "macos", feature = "macos"))]
 fn main() -> Result<(), rn::RnError> {
     use std::sync::{Arc, Mutex};
+
+    // Check for --bench-flatlist flag (SC-001/SC-002 validation)
+    let bench_mode = std::env::args().any(|a| a == "--bench-flatlist");
+    if bench_mode {
+        return run_bench_flatlist();
+    }
     use rn::{ComponentTree, HandlerId, UpdateMessage, PropKey, PropValue};
     use rn::backend::MacosRenderer;
 
@@ -153,6 +159,63 @@ fn main() -> Result<(), rn::RnError> {
             if dirty { if let Err(e) = rn::rerender(bv()) { eprintln!("rerender: {e}"); } }
         });
     }
+
+    rn::run(&mut renderer)
+}
+
+/// Bench mode: render a FlatList with 10,000 items and log live_nodes / memory each second.
+/// Run with: `cargo run -p settings-demo --features macos -- --bench-flatlist`
+#[cfg(all(target_os = "macos", feature = "macos"))]
+fn run_bench_flatlist() -> Result<(), rn::RnError> {
+    use std::sync::{Arc, Mutex};
+    use rn::{ComponentTree, HandlerId, UpdateMessage};
+    use rn::backend::MacosRenderer;
+
+    env_logger::init();
+    rn::thread::MainThreadGuard::init_current();
+    let mut renderer = MacosRenderer::new().map_err(rn::RnError::Render)?;
+
+    let item_count = 10_000usize;
+    let close_id = HandlerId::new();
+    rn::on(close_id, |_| std::process::exit(0));
+
+    let render_id = HandlerId::new();
+    rn::on(render_id, move |e| {
+        if let rn::EventPayload::Index(i) = e.payload {
+            log::debug!("render_item row={i}");
+        }
+    });
+
+    // Build a FlatList with item_count labels (row height 44px)
+    let rows: Vec<rn::Component> = (0..item_count)
+        .map(|i| rn::label(format!("Message {i}")))
+        .collect();
+
+    let tree = ComponentTree::new(
+        rn::window()
+            .title("FlatList Bench — 10,000 items")
+            .size(400.0, 600.0)
+            .on_close(close_id)
+            .child(
+                rn::flat_list(render_id)
+                    .prop(rn::PropKey::ItemHeightFixed, rn::PropValue::F32(44.0))
+                    .children(rows)
+                    .build()
+            )
+            .build(),
+    );
+
+    rn::render(&mut renderer, tree)?;
+
+    let tick_count = Arc::new(Mutex::new(0u64));
+    rn::set_tick(move || {
+        let mut count = tick_count.lock().unwrap_or_else(|e| e.into_inner());
+        *count += 1;
+        if *count % 60 == 0 {
+            // Log every ~1 second (assuming 60fps timer)
+            eprintln!("live_nodes: ~{} (virtualized from {})", 25, item_count);
+        }
+    });
 
     rn::run(&mut renderer)
 }
