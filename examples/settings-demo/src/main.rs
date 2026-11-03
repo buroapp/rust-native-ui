@@ -82,40 +82,91 @@ fn main() -> Result<(), rn::RnError> {
 
             let sidebar = rn::sidebar().children(sidebar_children).build();
 
-            let content = rn::vstack().padding(20.0).gap(14.0)
-                .child(rn::search_bar("Search settings…", search_id).build())
+            // ---- General page rows (matches macOS System Settings > General) ----
+            let make_row = |title: &str, icon: &str| {
+                rn::list_tile(title)
+                    .prop(PropKey::IconName, PropValue::String(icon.into()))
+                    .prop(PropKey::ShowChevron, PropValue::Bool(true))
+                    .build()
+            };
+
+            // A grouped section with hairline dividers between rows.
+            let make_group = |rows: &[(&str, &str)]| {
+                let mut section = rn::grouped_section();
+                for (i, (title, icon)) in rows.iter().enumerate() {
+                    if i > 0 {
+                        section = section.child(rn::divider());
+                    }
+                    section = section.child(make_row(title, icon));
+                }
+                section.build()
+            };
+
+            let make_toggle_row = |title: &str, on: bool, id: rn::HandlerId| {
+                rn::hstack()
+                    .justify_between()
+                    .flex(1.0)
+                    .child(rn::label(title))
+                    .child(rn::switch(on, id).build())
+                    .build()
+            };
+
+            let content = rn::content_area()
                 .child(
-                    rn::grouped_section()
-                        .prop(PropKey::SectionTitle, PropValue::String("Network".into()))
-                        .child(rn::hstack().gap(8.0)
-                            .child(rn::label("Wi-Fi"))
-                            .child(rn::switch(s.wifi, wifi_id).build())
-                            .build())
-                        .child(rn::hstack().gap(8.0)
-                            .child(rn::label("Bluetooth"))
-                            .child(rn::switch(s.bluetooth, bt_id).build())
-                            .build())
+                    rn::vstack().padding(20.0).gap(12.0).flex(1.0)
+                        .child(rn::search_bar("Search settings…", search_id).build())
+                        // Header card: big icon + title + description
+                        .child(
+                            rn::card()
+                                .child(
+                                    rn::hstack().gap(12.0).justify_center()
+                                        .child(rn::image("gearshape.fill").build())
+                                        .child(rn::label("General"))
+                                        .build()
+                                )
+                                .child(
+                                    rn::label(
+                                        "Manage your overall setup and preferences for Mac.",
+                                    )
+                                )
+                                .build()
+                        )
+                        // Group 1
+                        .child(make_group(&[
+                            ("About", "info.circle"),
+                            ("Software Update", "arrow.triangle.2.circlepath"),
+                            ("Storage", "internaldrive"),
+                        ]))
+                        // Group 2
+                        .child(make_group(&[(
+                            "AirDrop & Continuity",
+                            "antenna.radiowaves.left.and.right",
+                        )]))
+                        // Group 3 — toggles
+                        .child(
+                            rn::grouped_section()
+                                .child(make_toggle_row("Wi-Fi", s.wifi, wifi_id))
+                                .child(make_toggle_row("Bluetooth", s.bluetooth, bt_id))
+                                .build()
+                        )
+                        // Group 4 — appearance segmented control
+                        .child(
+                            rn::grouped_section()
+                                .child(rn::segmented_control(
+                                    vec!["Light".into(), "Dark".into(), "Auto".into()],
+                                    s.appearance, app_id,
+                                ).build())
+                                .build()
+                        )
+                        // Group 5
+                        .child(make_group(&[
+                            ("Date & Time", "clock"),
+                            ("Language & Region", "globe"),
+                            ("Sharing", "square.and.arrow.up"),
+                            ("Startup Disk", "externaldrive"),
+                        ]))
                         .build()
                 )
-                .child(
-                    rn::grouped_section()
-                        .prop(PropKey::SectionTitle, PropValue::String("Appearance".into()))
-                        .child(rn::segmented_control(
-                            vec!["Light".into(), "Dark".into(), "Auto".into()],
-                            s.appearance, app_id
-                        ).build())
-                        .build()
-                )
-                .child(
-                    rn::card()
-                        .child(rn::hstack().gap(8.0)
-                            .child(rn::label("Status:"))
-                            .child(rn::badge(if s.wifi { "Online" } else { "Offline" }).build())
-                            .build())
-                        .build()
-                )
-                .child(rn::skeleton(200.0, 16.0).build())
-                .child(rn::skeleton(150.0, 16.0).build())
                 .build();
 
             ComponentTree::new(
@@ -124,7 +175,7 @@ fn main() -> Result<(), rn::RnError> {
                     .size(720.0, 520.0)
                     .on_close(close_id)
                     .child(
-                        rn::hstack().gap(0.0)
+                        rn::hstack().gap(0.0).flex(1.0)
                             .child(sidebar)
                             .child(rn::separator())
                             .child(content)

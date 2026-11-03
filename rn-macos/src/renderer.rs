@@ -90,6 +90,11 @@ enum NativeHandle {
     RichTextWidget(Retained<NSTextView>),
     TouchableWidget(Retained<NSView>),
     SafeAreaWidget(Retained<NSView>),
+    // Batch 1 — macOS layout primitives
+    ContentAreaWidget(Retained<NSView>),
+    ListTileWidget(Retained<NSView>),
+    ScaffoldWidget(Retained<NSView>),
+    TitleBarWidget(Retained<NSView>),
 }
 
 impl NativeHandle {
@@ -128,6 +133,10 @@ impl NativeHandle {
             NativeHandle::RichTextWidget(v) => Some(v),
             NativeHandle::TouchableWidget(v) => Some(v),
             NativeHandle::SafeAreaWidget(v) => Some(v),
+            NativeHandle::ContentAreaWidget(v) => Some(v),
+            NativeHandle::ListTileWidget(v) => Some(v),
+            NativeHandle::ScaffoldWidget(v) => Some(v),
+            NativeHandle::TitleBarWidget(v) => Some(v),
         }
     }
 }
@@ -1010,6 +1019,189 @@ fn create_node(
         }
 
         // ------------------------------------------------------------------
+        // ContentArea — main pane container with macOS content background
+        // ------------------------------------------------------------------
+        ComponentKind::ContentArea => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(600.0, 400.0));
+            let view: Retained<NSView> = unsafe {
+                let v = NSView::initWithFrame(mtm.alloc(), frame);
+                v.setWantsLayer(true);
+                v
+            };
+            attach_to_parent(state, parent_id, &view);
+            state.nodes.insert(node_id, NativeHandle::ContentAreaWidget(view));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // ListTile — settings row: icon tile + title + subtitle + chevron
+        // ------------------------------------------------------------------
+        ComponentKind::ListTile => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 44.0));
+            let row: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
+
+            let has_icon = props.contains_key(&PropKey::IconName);
+            let mut text_x: f64 = 12.0;
+
+            // Leading icon tile
+            if let Some(PropValue::String(icon_name)) = props.get(&PropKey::IconName) {
+                let tile_size: f64 = 26.0;
+                let tile_frame = NSRect::new(
+                    NSPoint::new(12.0, (44.0 - tile_size) / 2.0),
+                    NSSize::new(tile_size, tile_size),
+                );
+                let iv: Retained<NSImageView> =
+                    unsafe { NSImageView::initWithFrame(mtm.alloc(), tile_frame) };
+                let ns_name = NSString::from_str(icon_name);
+                if let Some(img) = unsafe {
+                    NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
+                } {
+                    unsafe { iv.setImage(Some(&img)) }
+                }
+                unsafe { row.addSubview(&iv) };
+                text_x = 12.0 + tile_size + 12.0;
+            }
+
+            let has_subtitle = props.contains_key(&PropKey::Subtitle);
+            let title_text = match props.get(&PropKey::Text) {
+                Some(PropValue::String(s)) => s.clone(),
+                _ => String::new(),
+            };
+
+            // Title
+            let title_h: f64 = 17.0;
+            let title_y = if has_subtitle {
+                24.0
+            } else {
+                (44.0 - title_h) / 2.0
+            };
+            let tf: Retained<NSTextField> = unsafe {
+                let t = NSTextField::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(
+                        NSPoint::new(text_x, title_y),
+                        NSSize::new(400.0 - text_x - 40.0, title_h),
+                    ),
+                );
+                t.setEditable(false);
+                t.setBordered(false);
+                t.setDrawsBackground(false);
+                t.setStringValue(&NSString::from_str(&title_text));
+                t.setFont(Some(&NSFont::systemFontOfSize(13.0)));
+                t.setTextColor(Some(&NSColor::labelColor()));
+                t.setLineBreakMode(NSLineBreakMode(4));
+                t
+            };
+            unsafe { row.addSubview(&tf) };
+
+            // Subtitle
+            if let Some(PropValue::String(sub)) = props.get(&PropKey::Subtitle) {
+                let stf: Retained<NSTextField> = unsafe {
+                    let t = NSTextField::initWithFrame(
+                        mtm.alloc(),
+                        NSRect::new(
+                            NSPoint::new(text_x, 8.0),
+                            NSSize::new(400.0 - text_x - 40.0, 14.0),
+                        ),
+                    );
+                    t.setEditable(false);
+                    t.setBordered(false);
+                    t.setDrawsBackground(false);
+                    t.setStringValue(&NSString::from_str(sub));
+                    t.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+                    t.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                    t.setLineBreakMode(NSLineBreakMode(4));
+                    t
+                };
+                unsafe { row.addSubview(&stf) };
+            }
+
+            // Trailing disclosure chevron
+            if bool_prop(&props, PropKey::ShowChevron, true) {
+                let chev_frame =
+                    NSRect::new(NSPoint::new(400.0 - 26.0, 14.0), NSSize::new(16.0, 16.0));
+                let civ: Retained<NSImageView> =
+                    unsafe { NSImageView::initWithFrame(mtm.alloc(), chev_frame) };
+                let ns_name = NSString::from_str("chevron.right");
+                if let Some(img) = unsafe {
+                    NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
+                } {
+                    unsafe { civ.setImage(Some(&img)) }
+                }
+                unsafe { row.addSubview(&civ) };
+                let _ = has_icon;
+            }
+
+            // Click target
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnPress) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let btn: Retained<NSButton> =
+                        NSButton::initWithFrame(mtm.alloc(), NSRect::new(
+                            NSPoint::new(0.0, 0.0),
+                            NSSize::new(400.0, 44.0),
+                        ));
+                    btn.setBezelStyle(NSBezelStyle::Automatic);
+                    btn.setBordered(false);
+                    btn.setTransparent(true);
+                    btn.setTitle(&NSString::from_str(""));
+                    let obj: &AnyObject = &target;
+                    btn.setTarget(Some(obj));
+                    btn.setAction(Some(sel!(fire:)));
+                    row.addSubview(&btn);
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+
+            attach_to_parent(state, parent_id, &row);
+            state.nodes.insert(node_id, NativeHandle::ListTileWidget(row));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // Scaffold — vertical stack container for title bar / toolbar / content
+        // ------------------------------------------------------------------
+        ComponentKind::Scaffold => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 600.0));
+            let view: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
+            attach_to_parent(state, parent_id, &view);
+            state.nodes.insert(node_id, NativeHandle::ScaffoldWidget(view));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // TitleBar — window chrome strip with centered title
+        // ------------------------------------------------------------------
+        ComponentKind::TitleBar => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 28.0));
+            let bar: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
+            if let Some(PropValue::String(title)) = props.get(&PropKey::Text) {
+                let tf: Retained<NSTextField> = unsafe {
+                    let t = NSTextField::initWithFrame(
+                        mtm.alloc(),
+                        NSRect::new(NSPoint::new(80.0, 4.0), NSSize::new(640.0, 20.0)),
+                    );
+                    t.setEditable(false);
+                    t.setBordered(false);
+                    t.setDrawsBackground(false);
+                    t.setAlignment(objc2_app_kit::NSTextAlignment::Center);
+                    t.setStringValue(&NSString::from_str(title));
+                    t.setFont(Some(&NSFont::boldSystemFontOfSize(13.0)));
+                    t.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                    t
+                };
+                unsafe { bar.addSubview(&tf) };
+            }
+            attach_to_parent(state, parent_id, &bar);
+            state.nodes.insert(node_id, NativeHandle::TitleBarWidget(bar));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
         // ActivityIndicator — NSProgressIndicator indeterminate (FR-010)
         // ------------------------------------------------------------------
         ComponentKind::ActivityIndicator => {
@@ -1111,6 +1303,11 @@ fn create_node(
             let card: Retained<NSBox> = unsafe { NSBox::initWithFrame(mtm.alloc(), frame) };
             unsafe {
                 card.setBoxType(NSBoxType::NSBoxCustom);
+                card.setContentViewMargins(NSSize::new(0.0, 0.0));
+                card.setCornerRadius(8.0);
+                card.setBorderWidth(1.0);
+                card.setBorderColor(&NSColor::separatorColor());
+                card.setFillColor(&NSColor::controlBackgroundColor());
             }
             attach_to_parent(state, parent_id, &card);
             state.nodes.insert(node_id, NativeHandle::CardWidget(card));
@@ -1624,6 +1821,10 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
         },
         Some(NativeHandle::SafeAreaWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::TouchableWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::ContentAreaWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::ListTileWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::ScaffoldWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::TitleBarWidget(parent)) => unsafe { parent.addSubview(view) },
         _ => {}
     }
 }
@@ -1682,6 +1883,12 @@ fn relayout_window(state: &RendererState, window_id: NodeId) {
     );
     let result = compute_layout(&spec, content_rect);
     log::debug!("relayout_window: {} rects computed", result.rects.len());
+    // Log first 6 rects by node id for layout debugging
+    let mut sorted: Vec<_> = result.rects.iter().collect();
+    sorted.sort_by_key(|(id, _)| id.0);
+    for (id, r) in sorted.iter().take(6) {
+        log::debug!("  rect {:?}: x={:.0} y={:.0} w={:.0} h={:.0}", id.0, r.x, r.y, r.width, r.height);
+    }
     apply_rects(state, &content_view, &result);
 }
 
@@ -1698,7 +1905,9 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         | ComponentKind::Card
         | ComponentKind::TouchableOpacity
         | ComponentKind::Modal
-        | ComponentKind::Popover => LayoutAxis::Vertical,
+        | ComponentKind::Popover
+        | ComponentKind::Scaffold
+        | ComponentKind::ContentArea => LayoutAxis::Vertical,
         _ => LayoutAxis::None,
     };
     let padding = f32_prop(&shadow.props, PropKey::Padding, 0.0);
@@ -1711,7 +1920,10 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::Checkbox => (None, Some(22.0)),
         ComponentKind::Slider => (Some(200.0), Some(24.0)),
         ComponentKind::ProgressBar => (Some(200.0), Some(20.0)),
-        ComponentKind::Separator => (None, Some(8.0)),
+        ComponentKind::Separator => (
+            None,
+            Some(f32_opt(&shadow.props, PropKey::Height).unwrap_or(8.0)),
+        ),
         ComponentKind::TextArea => (None, Some(100.0)),
         ComponentKind::Dropdown => (Some(180.0), Some(26.0)),
         ComponentKind::Image => (Some(32.0), Some(32.0)),
@@ -1735,6 +1947,8 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::SearchBar => (None, Some(28.0)),
         ComponentKind::StatusBar => (None, Some(22.0)),
         ComponentKind::SidebarItem => (None, Some(28.0)),
+        ComponentKind::ListTile => (None, Some(44.0)),
+        ComponentKind::TitleBar => (None, Some(28.0)),
         ComponentKind::RichText => (None, Some(80.0)),
         ComponentKind::FlatList => (None, Some(300.0)),
         ComponentKind::ScrollView => (None, Some(200.0)),
@@ -1768,24 +1982,10 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         .filter_map(|c| build_spec(state, *c))
         .collect();
 
-    // flex_grow: fill available space when no fixed width/height is set.
-    let flex_grow = match shadow.kind {
-        // SafeAreaView and TouchableOpacity: always fill parent
-        ComponentKind::SafeAreaView | ComponentKind::TouchableOpacity => 1.0,
-        // Fill-width containers (no fixed_width): expand to fill horizontal space
-        ComponentKind::LayoutContainer(_)
-        | ComponentKind::GroupedSection
-        | ComponentKind::Card
-        | ComponentKind::SearchBar
-        | ComponentKind::TextArea
-        | ComponentKind::ScrollView
-        | ComponentKind::FlatList
-        | ComponentKind::RichText
-        | ComponentKind::Toolbar
-        | ComponentKind::Skeleton
-            if fixed_width.is_none() => 1.0,
-        _ => 0.0,
-    };
+    // flex_grow comes directly from the FlexGrow prop — no per-kind guessing.
+    // Callers set .flex(1.0) when they want fill-behavior.
+    let flex_grow = f32_prop(&shadow.props, PropKey::FlexGrow, 0.0);
+    let justify = f32_prop(&shadow.props, PropKey::Justify, 0.0) as u8;
     Some(LayoutSpec {
         id: LayoutNodeId(node_id.0),
         axis,
@@ -1796,6 +1996,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         fixed_width,
         fixed_height,
         flex_grow,
+        justify,
         children,
     })
 }
@@ -1952,7 +2153,7 @@ fn f32_prop(props: &Props, key: PropKey, default: f32) -> f32 {
 
 fn f32_opt(props: &Props, key: PropKey) -> Option<f32> {
     match props.get(&key) {
-        Some(PropValue::F32(v)) => Some(*v),
+        Some(PropValue::F32(v)) if *v > 0.0 => Some(*v),
         _ => None,
     }
 }

@@ -67,6 +67,11 @@ pub enum ComponentKind {
     Toolbar,
     Switch,
     StatusBar,
+    // Batch 1 — macOS layout primitives (macos_ui parity)
+    ContentArea,
+    ListTile,
+    Scaffold,
+    TitleBar,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -87,8 +92,13 @@ pub enum PropKey {
     MinHeight,
     Padding,
     Gap,
+    FlexGrow,   // f32 — how much this node grows within its parent flex container
+    FlexShrink, // f32 — how much this node shrinks
+    Justify,    // f32 — main-axis alignment: 0=start 1=end 2=center 3=space-between
     Title,
     Placeholder,
+    Subtitle,   // secondary label text (ListTile)
+    ShowChevron, // bool — trailing disclosure chevron (ListTile)
     // Handlers
     OnPress,
     OnChange,

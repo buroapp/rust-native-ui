@@ -52,6 +52,9 @@ pub struct LayoutSpec {
     pub fixed_height: Option<f32>,
     /// `flex_grow`: 1.0 means fill remaining space; 0.0 (default) means fixed/shrink.
     pub flex_grow: f32,
+    /// Main-axis alignment: 0=start, 1=end, 2=center, 3=space-between,
+    /// 4=space-around, 5=space-evenly.
+    pub justify: u8,
     pub children: Vec<LayoutSpec>,
 }
 
@@ -106,6 +109,15 @@ pub fn compute_layout(spec: &LayoutSpec, container: Rect) -> LayoutResult {
             display: Display::Flex,
             flex_direction,
             flex_grow: spec.flex_grow,
+            justify_content: Some(match spec.justify {
+                1 => JustifyContent::End,
+                2 => JustifyContent::Center,
+                3 => JustifyContent::SpaceBetween,
+                4 => JustifyContent::SpaceAround,
+                5 => JustifyContent::SpaceEvenly,
+                _ => JustifyContent::Start,
+            }),
+            align_items: Some(AlignItems::Stretch),
             padding: Rect {
                 left: length(spec.padding),
                 right: length(spec.padding),
@@ -136,6 +148,16 @@ pub fn compute_layout(spec: &LayoutSpec, container: Rect) -> LayoutResult {
     let Some(root) = build(&mut taffy, &mut mapping, spec) else {
         return LayoutResult::default();
     };
+
+    // Force root to exactly fill the container — overrides any `auto` size.
+    // Without this, taffy shrinks the root to its content size.
+    if let Ok(mut style) = taffy.style(root).cloned() {
+        style.size = Size {
+            width: length(container.width),
+            height: length(container.height),
+        };
+        let _ = taffy.set_style(root, style);
+    }
 
     let root_size = Size {
         width: AvailableSpace::Definite(container.width),

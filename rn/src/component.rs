@@ -84,6 +84,28 @@ impl ComponentBuilder {
         self.prop(PropKey::Padding, PropValue::F32(padding))
     }
 
+    /// Set `flex_grow` — how much this node expands to fill available space
+    /// in its parent container. `1.0` = fill all remaining space.
+    /// `0.0` (default) = shrink to content.
+    pub fn flex(self, grow: f32) -> Self {
+        self.prop(PropKey::FlexGrow, PropValue::F32(grow))
+    }
+
+    /// Push children apart along the main axis (React Native `justifyContent: 'space-between'`).
+    pub fn justify_between(self) -> Self {
+        self.prop(PropKey::Justify, PropValue::F32(3.0))
+    }
+
+    /// Center children along the main axis.
+    pub fn justify_center(self) -> Self {
+        self.prop(PropKey::Justify, PropValue::F32(2.0))
+    }
+
+    /// Align children to the end of the main axis.
+    pub fn justify_end(self) -> Self {
+        self.prop(PropKey::Justify, PropValue::F32(1.0))
+    }
+
     pub fn on_press(self, id: HandlerId) -> Self {
         self.prop(PropKey::OnPress, PropValue::HandlerRef(id))
     }

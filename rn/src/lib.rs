@@ -130,6 +130,13 @@ pub fn separator() -> Component {
     ComponentBuilder::new(ComponentKind::Separator).build()
 }
 
+/// A 1pt hairline divider — use between rows inside a grouped section.
+pub fn divider() -> Component {
+    ComponentBuilder::new(ComponentKind::Separator)
+        .prop(PropKey::Height, PropValue::F32(1.0))
+        .build()
+}
+
 /// Build a `TextArea` (multi-line text input).
 pub fn text_area(text: impl Into<String>) -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::TextArea)
@@ -475,6 +482,8 @@ pub fn status_bar() -> ComponentBuilder {
 /// Start building a `Card` component.
 pub fn card() -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::Card)
+        .flex(1.0)
+        .padding(12.0)
 }
 
 /// Start building a `Badge` component.
@@ -528,12 +537,45 @@ pub fn sidebar_item(label: impl Into<String>, on_select: HandlerId) -> Component
 /// Start building a `GroupedSection` component.
 pub fn grouped_section() -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::GroupedSection)
+        .flex(1.0)
+        .padding(12.0)
+        .gap(8.0)
 }
 
 /// Start building a `SplitView` component.
 pub fn split_view() -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::SplitView)
         .prop(PropKey::DividerWidth, PropValue::F32(1.0))
+}
+
+/// Start building a `ContentArea` — the scrollable main pane of a macOS window.
+/// Sits to the right of a sidebar; tints its background slightly different from
+/// the window chrome (macos_ui `ContentArea`).
+pub fn content_area() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::ContentArea)
+        .flex(1.0)
+}
+
+/// Start building a `ListTile` — a macOS settings-style row with an optional
+/// leading icon tile, a title, an optional subtitle, and an optional trailing
+/// disclosure chevron (macos_ui `MacosListTile`).
+pub fn list_tile(title: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::ListTile)
+        .prop(PropKey::Text, PropValue::String(title.into()))
+        .flex(1.0)
+}
+
+/// Start building a `Scaffold` — top-level macOS window structure that stacks
+/// a title bar, toolbar, and content area around a sidebar/pane layout.
+pub fn scaffold() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Scaffold)
+        .flex(1.0)
+}
+
+/// Start building a `TitleBar` — the draggable window chrome strip above content.
+pub fn title_bar(title: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::TitleBar)
+        .prop(PropKey::Text, PropValue::String(title.into()))
 }
 
 /// Start building a `Toolbar` component.
