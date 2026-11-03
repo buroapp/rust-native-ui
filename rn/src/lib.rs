@@ -13,6 +13,7 @@
 pub mod component;
 pub mod error;
 pub mod event;
+pub mod flat_list;
 pub mod reconciler;
 pub mod renderer;
 pub mod thread;
@@ -454,7 +455,7 @@ pub fn text_plain(s: impl Into<String>) -> ComponentBuilder {
 }
 
 /// Start building a `Switch` component.
-pub fn rn_switch(value: bool, on_change: HandlerId) -> ComponentBuilder {
+pub fn switch(value: bool, on_change: HandlerId) -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::Switch)
         .prop(PropKey::SwitchValue, PropValue::Bool(value))
         .prop(PropKey::OnChange, PropValue::HandlerRef(on_change))

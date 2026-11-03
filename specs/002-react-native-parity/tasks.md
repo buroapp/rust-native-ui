@@ -16,12 +16,12 @@
 
 **Purpose**: Add new example binaries and Cargo workspace entries.
 
-- [ ] T001 Add `examples/settings-demo` to `Cargo.toml` workspace members in `Cargo.toml`
-- [ ] T002 Add `examples/mail-demo` to `Cargo.toml` workspace members in `Cargo.toml`
-- [ ] T003 [P] Create `examples/settings-demo/Cargo.toml` with `rn` dep + `macos` feature
-- [ ] T004 [P] Create `examples/mail-demo/Cargo.toml` with `rn` dep + `macos` feature
-- [ ] T005 [P] Create `examples/settings-demo/src/main.rs` stub (empty `fn main`)
-- [ ] T006 [P] Create `examples/mail-demo/src/main.rs` stub (empty `fn main`)
+- [x] T001 Add `examples/settings-demo` to `Cargo.toml` workspace members in `Cargo.toml`
+- [x] T002 Add `examples/mail-demo` to `Cargo.toml` workspace members in `Cargo.toml`
+- [x] T003 [P] Create `examples/settings-demo/Cargo.toml` with `rn` dep + `macos` feature
+- [x] T004 [P] Create `examples/mail-demo/Cargo.toml` with `rn` dep + `macos` feature
+- [x] T005 [P] Create `examples/settings-demo/src/main.rs` stub (empty `fn main`)
+- [x] T006 [P] Create `examples/mail-demo/src/main.rs` stub (empty `fn main`)
 
 **Checkpoint**: `cargo build --workspace --features macos` compiles with zero errors.
 
@@ -33,13 +33,13 @@
 
 **⚠️ CRITICAL**: No user story implementation can begin until this phase is complete.
 
-- [ ] T007 Add new `ComponentKind` variants to `rn/src/component.rs`: `ScrollView`, `FlatList`, `TouchableOpacity`, `SafeAreaView`, `ActivityIndicator`, `Modal`, `Popover`, `Text` (rich), `Card`, `Badge`, `Skeleton`, `SegmentedControl`, `SearchBar`, `Sidebar`, `SidebarItem`, `GroupedSection`, `SplitView`, `Toolbar`, `Switch`, `StatusBar`
-- [ ] T008 [P] Add new `PropKey` variants to `rn/src/component.rs`: `Direction`, `Scrollable`, `ContentOffset`, `OnScroll`, `ItemHeight`, `BufferRows`, `EndReachThreshold`, `OnEndReached`, `PressOpacity`, `StopBubbling`, `SafeAreaInsets`, `IndicatorSize`, `ModalVisible`, `ModalPosition`, `CloseOnBackdrop`, `AnchorId`, `SwitchValue`, `StatusBarVisible`, `TextSpans`, `TextWrap`, `TextAlign`, `MaxLines`, `Padding`, `Gap`, `BorderRadius`, `Shadow`, `Variant`, `SkeletonVariant`, `SelectedIndex`, `Options`, `SearchPlaceholder`, `SearchValue`, `SidebarWidth`, `Collapsed`, `IconName`, `SidebarBadge`, `SectionTitle`, `SplitOrientation`, `DividerWidth`, `MinPaneSizes`, `PaneSizes`, `ToolbarActions`, `StyleToken`
-- [ ] T009 [P] Add new `PropValue` variants to `rn/src/component.rs`: `ScrollDirection(ScrollDirection)`, `ItemHeight(ItemHeight)`, `ModalPosition(ModalPosition)`, `SplitOrientation(SplitOrientation)`, `TextSpans(Vec<StyledSpan>)`, `ToolbarActions(Vec<ToolbarAction>)`, `PaneSizes(Vec<f32>)`, `Style(Style)`, `Insets(Insets)`
-- [ ] T010 [P] Add new `EventPayload` variants to `rn/src/event.rs`: `Scroll(ScrollEvent)`, `Search(String)`, `Segment(i32)`, `SplitResize(Vec<f32>)`, `ToolbarAction(String)` — include `ScrollEvent` struct
-- [ ] T011 Add design system token types to `rn/src/style.rs` (new file): `ColorToken`, `SpacingToken`, `RadiusToken`, `FontToken`, `FocusRingToken`, `FocusRingStyle`, `ShadowStyle`, `Style` builder with all chainable methods, preset constructors (`primary()`, `secondary()`, `destructive()`, `ghost()`, `outline()`)
-- [ ] T012 [P] Add auxiliary types to `rn/src/component.rs` or `rn/src/types.rs`: `ScrollDirection`, `ItemHeight`, `ModalPosition`, `SplitOrientation`, `StyledSpan` (with builder), `TextAlign`, `ToolbarAction`, `BadgeVariant`, `BadgeSize`, `SkeletonVariant`, `IndicatorSize`, `Insets`, `Point`
-- [ ] T013 Re-export all new public types from `rn/src/lib.rs` and add stub builder functions for all new components (returning `ComponentBuilder::new(ComponentKind::X)`)
+- [x] T007 Add new `ComponentKind` variants to `rn/src/component.rs`: `ScrollView`, `FlatList`, `TouchableOpacity`, `SafeAreaView`, `ActivityIndicator`, `Modal`, `Popover`, `Text` (rich), `Card`, `Badge`, `Skeleton`, `SegmentedControl`, `SearchBar`, `Sidebar`, `SidebarItem`, `GroupedSection`, `SplitView`, `Toolbar`, `Switch`, `StatusBar`
+- [x] T008 [P] Add new `PropKey` variants to `rn/src/component.rs`: `Direction`, `Scrollable`, `ContentOffset`, `OnScroll`, `ItemHeight`, `BufferRows`, `EndReachThreshold`, `OnEndReached`, `PressOpacity`, `StopBubbling`, `SafeAreaInsets`, `IndicatorSize`, `ModalVisible`, `ModalPosition`, `CloseOnBackdrop`, `AnchorId`, `SwitchValue`, `StatusBarVisible`, `TextSpans`, `TextWrap`, `TextAlign`, `MaxLines`, `Padding`, `Gap`, `BorderRadius`, `Shadow`, `Variant`, `SkeletonVariant`, `SelectedIndex`, `Options`, `SearchPlaceholder`, `SearchValue`, `SidebarWidth`, `Collapsed`, `IconName`, `SidebarBadge`, `SectionTitle`, `SplitOrientation`, `DividerWidth`, `MinPaneSizes`, `PaneSizes`, `ToolbarActions`, `StyleToken`
+- [x] T009 [P] Add new `PropValue` variants to `rn/src/component.rs`: `ScrollDirection(ScrollDirection)`, `ItemHeight(ItemHeight)`, `ModalPosition(ModalPosition)`, `SplitOrientation(SplitOrientation)`, `TextSpans(Vec<StyledSpan>)`, `ToolbarActions(Vec<ToolbarAction>)`, `PaneSizes(Vec<f32>)`, `Style(Style)`, `Insets(Insets)`
+- [x] T010 [P] Add new `EventPayload` variants to `rn/src/event.rs`: `Scroll(ScrollEvent)`, `Search(String)`, `Segment(i32)`, `SplitResize(Vec<f32>)`, `ToolbarAction(String)` — include `ScrollEvent` struct
+- [x] T011 Add design system token types to `rn/src/style.rs` (new file): `ColorToken`, `SpacingToken`, `RadiusToken`, `FontToken`, `FocusRingToken`, `FocusRingStyle`, `ShadowStyle`, `Style` builder with all chainable methods, preset constructors (`primary()`, `secondary()`, `destructive()`, `ghost()`, `outline()`)
+- [x] T012 [P] Add auxiliary types to `rn/src/component.rs` or `rn/src/types.rs`: `ScrollDirection`, `ItemHeight`, `ModalPosition`, `SplitOrientation`, `StyledSpan` (with builder), `TextAlign`, `ToolbarAction`, `BadgeVariant`, `BadgeSize`, `SkeletonVariant`, `IndicatorSize`, `Insets`, `Point`
+- [x] T013 Re-export all new public types from `rn/src/lib.rs` and add stub builder functions for all new components (returning `ComponentBuilder::new(ComponentKind::X)`)
 
 **Checkpoint**: `cargo build -p rn` compiles. `cargo test -p rn --tests` passes (existing 8 tests still green).
 
@@ -304,3 +304,39 @@ Phase 6 (US3) || Phase 7 (US4) || Phase 8 (US5) || Phase 9 (US6)
 - `unwrap()`/`expect()` are prohibited — use `?` or `log::error!` + early return
 - Commit after each checkpoint to preserve incremental progress
 - The constitution requires all three platforms ship simultaneously or be gated — each task covers all three backends
+
+---
+
+## Phase 13: Convergence
+
+**Purpose**: Close the gap between the spec/plan intent and the current implementation. All 20 new component kinds currently render as empty NSView stubs. This phase implements each fully in the macOS renderer and completes the two demo example apps.
+
+- [ ] T081 [US7] Implement `Card` in `rn-macos/src/renderer.rs`: `NSBox` with `.primaryBox` style, `CALayer` corner radius from `RadiusToken`, shadow via `CALayer.shadowColor/shadowOffset/shadowRadius`, background from `ColorToken::Card` → `NSColor.controlBackgroundColor` per FR-020 (missing)
+- [ ] T082 [P] [US7] Implement `Badge` in `rn-macos/src/renderer.rs`: non-editable `NSTextField`, `cell.backgroundColor` from `BadgeVariant` → `NSColor`, `wantsLayer = true`, `layer.cornerRadius = RadiusToken::Full.px()` per FR-021 (missing)
+- [ ] T083 [P] [US7] Implement `Skeleton` in `rn-macos/src/renderer.rs`: `NSView` with `wantsLayer = true`, `CAGradientLayer` shimmer with `CABasicAnimation` on `locations` keypath, colors from `SkeletonVariant` per FR-022 (missing)
+- [ ] T084 [P] [US7] Implement `Style` token rendering pass in `rn-macos/src/renderer.rs`: in `update_node` match `(_, PropKey::StyleBgColor | PropKey::StyleFgColor | PropKey::StyleRadius | PropKey::StyleFont | PropKey::StyleOpacity)` and apply to the native view's `NSColor`, `NSFont`, `CALayer.cornerRadius`, `alphaValue` per FR-018/FR-019 (missing)
+- [ ] T085 [US1] Implement `ScrollView` in `rn-macos/src/renderer.rs`: `NSScrollView` + `NSClipView` + content `NSView`; set scroll direction from `PropKey::Direction`; wire `NSScrollView.postsBoundsChangedNotifications` → `on_scroll` handler → `EventPayload::Scroll(ScrollEvent)` per FR-001/FR-016 (missing)
+- [ ] T086 [P] [US1] Implement `ActivityIndicator` in `rn-macos/src/renderer.rs`: `NSProgressIndicator` with `isIndeterminate = true`; call `startAnimation`/`stopAnimation` from `PropKey::Visible`; size from `PropKey::IndicatorSize`; color from `PropKey::Color` via `NSProgressIndicator.controlTint` per FR-010 (missing)
+- [ ] T087 [P] [US1] Implement `Switch` in `rn-macos/src/renderer.rs`: `NSSwitch` (macOS 10.15+); `state = NSControlStateValue(value ? 1 : 0)`; wire `action` → `EventPayload::Bool(state == 1)`; handle `PropKey::SwitchValue` updates in `update_node` per FR-013 (missing)
+- [ ] T088 [US2] Implement `FlatList` virtualization engine in `rn/src/flat_list.rs`: `FlatListState` struct with `visible_range`, `buffer_range`, `live_pool`, `height_cache`, `total_height`, `scroll_offset`; methods `on_scroll(offset) -> RecycleOps`, `on_data_append(n) -> MountOps`, `on_data_update(idx)`, `on_item_height_change(idx, h)` per FR-002/FR-003/FR-004 (missing)
+- [ ] T089 [US2] Implement `FlatList` in `rn-macos/src/renderer.rs`: `NSScrollView` host + `NSView` recycle pool; use `FlatListState` to determine mount/unmount; translate scroll delegate → `FlatListState::on_scroll`; wire `on_end_reached` when `scroll_offset >= total_height - end_reach_threshold`; log `live_node_count` at `debug!` level per FR-002/FR-004/FR-017 (missing)
+- [ ] T090 [US4] Implement `TouchableOpacity` in `rn-macos/src/renderer.rs`: transparent `NSView` overlay subclass with custom `mouseDown`/`mouseUp`; on `mouseDown` set `layer.opacity = press_opacity`, fire `on_press` handler on `mouseUp`, restore `opacity = 1.0`; the overlay intercepts events via overriding `hitTest:` per FR-005/FR-006 (missing)
+- [ ] T091 [US4] Implement event bubbling in `rn-core/src/lib.rs` and `rn-macos/src/renderer.rs`: add `stop_bubbling: bool` field to `Event`; in the macOS dispatch path after firing a handler, walk up the shadow tree parent chain and fire any `OnPress` handlers on parent nodes until `stop_bubbling = true` or root is reached per FR-015 (missing)
+- [ ] T092 [US3] Implement `SafeAreaView` in `rn-macos/src/renderer.rs`: query `window.contentLayoutGuide.layoutFrame` at creation time; apply top inset as `NSView.frame.origin.y` offset on content child; expose insets as read-only via `PropKey::StylePadding` update per FR-007 (missing)
+- [ ] T093 [US5] Implement `RichText` in `rn-macos/src/renderer.rs`: non-editable `NSTextView` (no scroll wrapper); build `NSMutableAttributedString` from `PropValue::Spans(Vec<StyledSpan>)`; map `ColorToken` → `NSColor`, `FontToken` → `NSFont`, bold/italic → `NSFontDescriptor` symbolic traits, underline → `NSUnderlineStyleAttributeName`; set `textContainer.widthTracksTextView = wrap` per FR-008/FR-009 (missing)
+- [ ] T094 [US6] Implement `Modal` in `rn-macos/src/renderer.rs`: `NSPanel` floating window; `beginSheet:completionHandler:` when `position = Center` and parent window available; backdrop overlay `NSView` for `close_on_backdrop`; wire `on_dismiss` via completion handler; manage `ModalState` machine (Hidden → Presenting → Visible → Dismissing) per FR-011 (missing)
+- [ ] T095 [P] [US6] Implement `Popover` in `rn-macos/src/renderer.rs`: `NSPopover` anchored to `anchor_id` node's `NSView` using `showRelativeToRect:ofView:preferredEdge:`; wire `popoverDidClose:` → `on_dismiss` handler per FR-012 (missing)
+- [ ] T096 [US8] Implement `SegmentedControl` in `rn-macos/src/renderer.rs`: `NSSegmentedControl` with segments from `PropValue::StringList(options)`; set `selectedSegment` from `PropKey::SelectedIndex`; wire `action` → `EventPayload::Segment(selectedSegment)` per FR-023 (missing)
+- [ ] T097 [P] [US8] Implement `SearchBar` in `rn-macos/src/renderer.rs`: `NSSearchField`; set `placeholderString` from `PropKey::Placeholder`; wire `controlTextDidChange:` → `EventPayload::Search(string)`; wire clear button → `on_clear` handler per FR-024 (missing)
+- [ ] T098 [P] [US8] Implement `Sidebar` and `SidebarItem` in `rn-macos/src/renderer.rs`: `Sidebar` → `NSScrollView` with `NSOutlineView` inside, vibrancy background via `NSVisualEffectView`, appropriate row height 40pt; `SidebarItem` → `NSTableCellView` with SF Symbol `NSImageView` + `NSTextField` + optional badge label; `selected` prop → `NSTableView.selectRowIndexes`; wire `onSelect` → `EventPayload::Index` per FR-025/FR-026 (missing)
+- [ ] T099 [P] [US8] Implement `GroupedSection` in `rn-macos/src/renderer.rs`: `NSBox` with `borderType = .noBorder`, `cornerRadius = 10`, `fillColor = NSColor.controlBackgroundColor`; optional title `NSTextField` above if `PropKey::SectionTitle` set; children laid out with padding from `PropKey::StylePadding` per FR-027 (missing)
+- [ ] T100 [US9] Implement `SplitView` in `rn-macos/src/renderer.rs`: `NSSplitView`; set `isVertical` from `PropKey::SplitOrientation`; implement `NSSplitViewDelegate` methods `constrainMinCoordinate:ofSubviewAt:` using `PropKey::MinPaneSizes`; wire `splitViewDidResizeSubviews:` → `EventPayload::SplitResize(pane_sizes)`; animate divider via `NSSplitViewItem.animator()` per FR-028 (missing)
+- [ ] T101 [P] [US9] Implement `Toolbar` in `rn-macos/src/renderer.rs`: `NSToolbar`; build `NSToolbarItem` per `ToolbarAction`; SF Symbol image from `icon_name` via `NSImage.imageWithSystemSymbolName:`; wire `itemClicked:` → `EventPayload::ToolbarAction(action_id)`; insert `NSToolbarItem.separatorToolbarItem` for `separator = true` per FR-029 (missing)
+- [ ] T102 [US1] Implement `StatusBar` in `rn-macos/src/renderer.rs`: set `NSWindow.titlebarAppearsTransparent` and `NSWindow.backgroundColor` from `PropKey::BackgroundColor` → `NSColor`; no-op when prop absent per FR-014 (partial)
+- [ ] T103 [US2] Add FlatList state machine tests to `tests/reconciler/tests.rs`: scroll → recycle → mount cycle; data append preserving scroll offset; out-of-viewport update queuing; on_end_reached fires at threshold per T035 (missing)
+- [ ] T104 [P] [US4] Add event bubbling test to `tests/reconciler/tests.rs`: nested touch targets; verify inner handler fires before outer; `stop_bubbling = true` halts chain per T046 (missing)
+- [ ] T105 [P] [US6] Add Modal state machine test to `tests/reconciler/tests.rs`: Hidden → Presenting → Visible → Dismissing → Hidden transitions per T058 (missing)
+- [ ] T106 [US8] Build `examples/settings-demo/src/main.rs`: full Settings-style demo with 5 `SidebarItem` categories; each panel uses `GroupedSection` + `Switch` rows + `SegmentedControl` + `SearchBar` at top; sidebar collapses below 160px; all new phase-2 components exercised per SC-007 (missing)
+- [ ] T107 [US9] Build `examples/mail-demo/src/main.rs`: full Mail-style demo with `Sidebar` (5 folder items), `FlatList` (100 message items), `RichText` detail pane, `Toolbar` (Reply/Forward/Delete), `SplitView` 3-pane divider; independently scrollable panes per SC-008 (missing)
+- [ ] T108 [P] Update `examples/showcase/src/main.rs`: add design system section (Card, Badge, Skeleton, button style variants), RichText section, ScrollView section, ActivityIndicator section per T077 (missing)
+- [ ] T109 Rename `rn_switch` → `switch` in `rn/src/lib.rs` and update any callers in examples/ to maintain naming consistency with all other builder functions (e.g. `scroll_view`, `sidebar_item`) per Constitution V / naming convention (partial)
