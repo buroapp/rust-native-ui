@@ -1443,6 +1443,19 @@ fn update_node(
                     view.setHidden(!*visible);
                 }
             }
+            (NativeHandle::SwitchWidget(sw), PropKey::SwitchValue) => {
+                if let PropValue::Bool(on) = value {
+                    unsafe {
+                        sw.setState(if *on { NSControlStateValueOn } else { NSControlStateValueOff });
+                    }
+                }
+            }
+            (NativeHandle::SegmentedControlWidget(sc), PropKey::SelectedIndex) => {
+                if let PropValue::F32(f) = value {
+                    unsafe { sc.setSelectedSegment(*f as isize) };
+                }
+            }
+            (NativeHandle::SidebarWidget(_), PropKey::Selected) => {} // selection styling handled via SidebarItem
             _ => {}
         }
     }
@@ -1641,7 +1654,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         // Phase-2 leaf widgets — fixed intrinsic sizes
         ComponentKind::Switch => (Some(51.0), Some(31.0)),
         ComponentKind::ActivityIndicator => (Some(32.0), Some(32.0)),
-        ComponentKind::Badge => (Some(40.0), Some(20.0)),
+        ComponentKind::Badge => (Some(60.0), Some(20.0)),
         ComponentKind::Skeleton => (None, Some(20.0)),
         ComponentKind::SegmentedControl => (Some(220.0), Some(28.0)),
         ComponentKind::SearchBar => (None, Some(28.0)),
@@ -1651,18 +1664,15 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::FlatList => (None, Some(300.0)),
         ComponentKind::ScrollView => (None, Some(200.0)),
         // Phase-2 containers — fill from props, fall back to flex/grow
-        ComponentKind::SplitView
-        | ComponentKind::Sidebar
-        | ComponentKind::SafeAreaView
-        | ComponentKind::GroupedSection
-        | ComponentKind::Card
-        | ComponentKind::TouchableOpacity
-        | ComponentKind::Modal
-        | ComponentKind::Popover
-        | ComponentKind::Toolbar => (
-            f32_opt(&shadow.props, PropKey::Width),
-            f32_opt(&shadow.props, PropKey::Height),
-        ),
+        ComponentKind::Sidebar => {
+            // Use SidebarWidth if present, else Width prop
+            let w = shadow.props.get(&PropKey::SidebarWidth)
+                .or_else(|| shadow.props.get(&PropKey::Width))
+                .and_then(|v| if let PropValue::F32(f) = v { Some(*f) } else { None });
+            (w, f32_opt(&shadow.props, PropKey::Height))
+        },
+        ComponentKind::GroupedSection => (None, Some(f32_opt(&shadow.props, PropKey::Height).unwrap_or(80.0))),
+        ComponentKind::Card => (None, Some(f32_opt(&shadow.props, PropKey::Height).unwrap_or(60.0))),
         _ => (
             f32_opt(&shadow.props, PropKey::Width),
             f32_opt(&shadow.props, PropKey::Height),
