@@ -31,7 +31,9 @@ use objc2_app_kit::{
     NSDatePicker, NSDatePickerStyle, NSImageView, NSLineBreakMode, NSPopUpButton, NSProgressIndicator,
     NSScrollView, NSSlider, NSTextField, NSTextFieldDelegate,
     NSTextView, NSStepper, NSView, NSWindow, NSWindowDelegate, NSWindowStyleMask,
-    NSBox, NSBoxType, NSImage, NSSearchField, NSSegmentedControl, NSSwitch, NSSplitView,
+    NSBox, NSBoxType, NSDatePickerElementFlags, NSDatePickerMode, NSImage,
+    NSLevelIndicator, NSLevelIndicatorStyle, NSSearchField,
+    NSSegmentedControl, NSSwitch, NSSplitView,
     NSTitlePosition, NSVisualEffectView, NSVisualEffectMaterial,
     NSVisualEffectState,
 };
@@ -101,6 +103,19 @@ enum NativeHandle {
     HelpButtonWidget(Retained<NSButton>),
     PopupButtonWidget(Retained<NSPopUpButton>),
     BackButtonWidget(Retained<NSButton>),
+    // Batches 3-6
+    CapacityIndicatorWidget(Retained<NSLevelIndicator>),
+    RatingIndicatorWidget(Retained<NSLevelIndicator>),
+    RelevanceIndicatorWidget(Retained<NSLevelIndicator>),
+    TooltipWidget(Retained<NSTextField>),
+    TimePickerWidget(Retained<NSDatePicker>),
+    GraphicalTimePickerWidget(Retained<NSDatePicker>),
+    ToolbarIconButtonWidget(Retained<NSButton>),
+    ToolbarSpacerWidget(Retained<NSView>),
+    ToolbarDividerWidget(Retained<NSBox>),
+    ToolbarPopupWidget(Retained<NSPopUpButton>),
+    AlertDialogWidget(Retained<NSView>),
+    SheetWidget(Retained<NSView>),
 }
 
 impl NativeHandle {
@@ -143,11 +158,23 @@ impl NativeHandle {
             NativeHandle::ListTileWidget(v) => Some(v),              
             NativeHandle::ScaffoldWidget(v) => Some(v),              
             NativeHandle::TitleBarWidget(v) => Some(v),              
-            NativeHandle::IconButtonWidget(v) => Some(v),
-            NativeHandle::DisclosureButtonWidget(v) => Some(v),
-            NativeHandle::HelpButtonWidget(v) => Some(v),
-            NativeHandle::PopupButtonWidget(v) => Some(v),
-            NativeHandle::BackButtonWidget(v) => Some(v),
+            NativeHandle::IconButtonWidget(v) => Some(v),            
+            NativeHandle::DisclosureButtonWidget(v) => Some(v),      
+            NativeHandle::HelpButtonWidget(v) => Some(v),            
+            NativeHandle::PopupButtonWidget(v) => Some(v),           
+            NativeHandle::BackButtonWidget(v) => Some(v),            
+            NativeHandle::CapacityIndicatorWidget(v) => Some(v),
+            NativeHandle::RatingIndicatorWidget(v) => Some(v),
+            NativeHandle::RelevanceIndicatorWidget(v) => Some(v),
+            NativeHandle::TooltipWidget(v) => Some(v),
+            NativeHandle::TimePickerWidget(v) => Some(v),
+            NativeHandle::GraphicalTimePickerWidget(v) => Some(v),
+            NativeHandle::ToolbarIconButtonWidget(v) => Some(v),
+            NativeHandle::ToolbarSpacerWidget(v) => Some(v),
+            NativeHandle::ToolbarDividerWidget(v) => Some(v),
+            NativeHandle::ToolbarPopupWidget(v) => Some(v),
+            NativeHandle::AlertDialogWidget(v) => Some(v),
+            NativeHandle::SheetWidget(v) => Some(v),
         }
     }
 }
@@ -1367,6 +1394,280 @@ fn create_node(
         }
 
         // ------------------------------------------------------------------
+        // CapacityIndicator — discrete capacity bar (NSLevelIndicator)
+        // ------------------------------------------------------------------
+        ComponentKind::CapacityIndicator => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 16.0));
+            let li: Retained<NSLevelIndicator> =
+                unsafe { NSLevelIndicator::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                li.setLevelIndicatorStyle(NSLevelIndicatorStyle::DiscreteCapacity);
+                li.setMinValue(0.0);
+                li.setMaxValue(f32_prop(&props, PropKey::Max, 100.0) as f64);
+                li.setDoubleValue(f32_prop(&props, PropKey::Value, 0.0) as f64);
+            }
+            attach_to_parent(state, parent_id, &li);
+            state.nodes.insert(node_id, NativeHandle::CapacityIndicatorWidget(li));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // RatingIndicator — star rating (NSLevelIndicator Rating style)
+        // ------------------------------------------------------------------
+        ComponentKind::RatingIndicator => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(120.0, 20.0));
+            let li: Retained<NSLevelIndicator> =
+                unsafe { NSLevelIndicator::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                li.setLevelIndicatorStyle(NSLevelIndicatorStyle::Rating);
+                li.setMinValue(0.0);
+                li.setMaxValue(f32_prop(&props, PropKey::Max, 5.0) as f64);
+                li.setDoubleValue(f32_prop(&props, PropKey::Value, 0.0) as f64);
+            }
+            attach_to_parent(state, parent_id, &li);
+            state.nodes.insert(node_id, NativeHandle::RatingIndicatorWidget(li));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // RelevanceIndicator — search relevance bars (NSLevelIndicator)
+        // ------------------------------------------------------------------
+        ComponentKind::RelevanceIndicator => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(48.0, 16.0));
+            let li: Retained<NSLevelIndicator> =
+                unsafe { NSLevelIndicator::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                li.setLevelIndicatorStyle(NSLevelIndicatorStyle::Relevancy);
+                li.setMinValue(0.0);
+                li.setMaxValue(f32_prop(&props, PropKey::Max, 1.0) as f64);
+                li.setDoubleValue(f32_prop(&props, PropKey::Value, 0.5) as f64);
+            }
+            attach_to_parent(state, parent_id, &li);
+            state.nodes.insert(node_id, NativeHandle::RelevanceIndicatorWidget(li));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // Tooltip — small secondary label
+        // ------------------------------------------------------------------
+        ComponentKind::Tooltip => {
+            let text = match props.get(&PropKey::Text) {
+                Some(PropValue::String(s)) => s.clone(),
+                _ => String::new(),
+            };
+            let tf_frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(180.0, 18.0));
+            let tf: Retained<NSTextField> = unsafe {
+                let t = NSTextField::initWithFrame(mtm.alloc(), tf_frame);
+                t.setEditable(false);
+                t.setBordered(false);
+                t.setDrawsBackground(false);
+                t.setStringValue(&NSString::from_str(&text));
+                t.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+                t.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                t
+            };
+            attach_to_parent(state, parent_id, &tf);
+            state.nodes.insert(node_id, NativeHandle::TooltipWidget(tf));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // TimePicker — hour/minute field with steppers
+        // ------------------------------------------------------------------
+        ComponentKind::TimePicker => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(100.0, 26.0));
+            let dp: Retained<NSDatePicker> =
+                unsafe { NSDatePicker::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                dp.setDatePickerStyle(NSDatePickerStyle::TextFieldAndStepper);
+                dp.setDatePickerMode(NSDatePickerMode::Single);
+                dp.setDatePickerElements(NSDatePickerElementFlags(0x000c)); // HourMinute
+            }
+            attach_to_parent(state, parent_id, &dp);
+            state.nodes.insert(node_id, NativeHandle::TimePickerWidget(dp));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // GraphicalTimePicker — clock face
+        // ------------------------------------------------------------------
+        ComponentKind::GraphicalTimePicker => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(180.0, 160.0));
+            let dp: Retained<NSDatePicker> =
+                unsafe { NSDatePicker::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                dp.setDatePickerStyle(NSDatePickerStyle::ClockAndCalendar);
+                dp.setDatePickerMode(NSDatePickerMode::Single);
+                dp.setDatePickerElements(NSDatePickerElementFlags(0x000c)); // HourMinute
+            }
+            attach_to_parent(state, parent_id, &dp);
+            state.nodes.insert(node_id, NativeHandle::GraphicalTimePickerWidget(dp));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // ToolbarIconButton — SF Symbol button for toolbars
+        // ------------------------------------------------------------------
+        ComponentKind::ToolbarIconButton => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(32.0, 28.0));
+            let btn: Retained<NSButton> = unsafe { NSButton::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                btn.setBezelStyle(NSBezelStyle::Toolbar);
+                btn.setBordered(false);
+                btn.setTitle(&NSString::from_str(""));
+            }
+            if let Some(PropValue::String(sym)) = props.get(&PropKey::IconName) {
+                let ns_name = NSString::from_str(sym);
+                if let Some(img) = unsafe {
+                    NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
+                } {
+                    unsafe { btn.setImage(Some(&img)) }
+                }
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnPress) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    btn.setTarget(Some(obj));
+                    btn.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &btn);
+            state.nodes.insert(node_id, NativeHandle::ToolbarIconButtonWidget(btn));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // ToolbarSpacer — flexible blank area
+        // ------------------------------------------------------------------
+        ComponentKind::ToolbarSpacer => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(8.0, 28.0));
+            let sp: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
+            attach_to_parent(state, parent_id, &sp);
+            state.nodes.insert(node_id, NativeHandle::ToolbarSpacerWidget(sp));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // ToolbarDivider — vertical rule between toolbar items
+        // ------------------------------------------------------------------
+        ComponentKind::ToolbarDivider => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1.0, 20.0));
+            let dv: Retained<NSBox> = unsafe { NSBox::initWithFrame(mtm.alloc(), frame) };
+            unsafe { dv.setBoxType(NSBoxType::NSBoxSeparator) };
+            attach_to_parent(state, parent_id, &dv);
+            state.nodes.insert(node_id, NativeHandle::ToolbarDividerWidget(dv));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // ToolbarPopup — pull-down menu for a toolbar
+        // ------------------------------------------------------------------
+        ComponentKind::ToolbarPopup => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(120.0, 26.0));
+            let popup: Retained<NSPopUpButton> = unsafe {
+                let p = NSPopUpButton::initWithFrame_pullsDown(mtm.alloc(), frame, true);
+                p.setBezelStyle(NSBezelStyle::Toolbar);
+                p
+            };
+            if let Some(PropValue::StringList(opts)) = props.get(&PropKey::Options) {
+                unsafe {
+                    popup.removeAllItems();
+                    for o in opts {
+                        popup.addItemWithTitle(&NSString::from_str(o));
+                    }
+                }
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnChange) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    popup.setTarget(Some(obj));
+                    popup.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &popup);
+            state.nodes.insert(node_id, NativeHandle::ToolbarPopupWidget(popup));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // AlertDialog — modal alert panel with title + message
+        // ------------------------------------------------------------------
+        ComponentKind::AlertDialog => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(300.0, 120.0));
+            let panel: Retained<NSView> = unsafe {
+                let v = NSView::initWithFrame(mtm.alloc(), frame);
+                v.setWantsLayer(true);
+                v
+            };
+            let title = match props.get(&PropKey::Title) {
+                Some(PropValue::String(s)) => s.clone(),
+                _ => String::new(),
+            };
+            let message = match props.get(&PropKey::Text) {
+                Some(PropValue::String(s)) => s.clone(),
+                _ => String::new(),
+            };
+            unsafe {
+                let ttf: Retained<NSTextField> = NSTextField::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(NSPoint::new(16.0, 84.0), NSSize::new(268.0, 20.0)),
+                );
+                ttf.setEditable(false);
+                ttf.setBordered(false);
+                ttf.setDrawsBackground(false);
+                ttf.setStringValue(&NSString::from_str(&title));
+                ttf.setFont(Some(&NSFont::boldSystemFontOfSize(13.0)));
+                panel.addSubview(&ttf);
+
+                let mtf: Retained<NSTextField> = NSTextField::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(NSPoint::new(16.0, 40.0), NSSize::new(268.0, 40.0)),
+                );
+                mtf.setEditable(false);
+                mtf.setBordered(false);
+                mtf.setDrawsBackground(false);
+                mtf.setStringValue(&NSString::from_str(&message));
+                mtf.setFont(Some(&NSFont::systemFontOfSize(12.0)));
+                mtf.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                panel.addSubview(&mtf);
+            }
+            attach_to_parent(state, parent_id, &panel);
+            state.nodes.insert(node_id, NativeHandle::AlertDialogWidget(panel));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // Sheet — window-attached modal container
+        // ------------------------------------------------------------------
+        ComponentKind::Sheet => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 300.0));
+            let panel: Retained<NSView> = unsafe {
+                let v = NSView::initWithFrame(mtm.alloc(), frame);
+                v.setWantsLayer(true);
+                v
+            };
+            attach_to_parent(state, parent_id, &panel);
+            state.nodes.insert(node_id, NativeHandle::SheetWidget(panel));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
         // ActivityIndicator — NSProgressIndicator indeterminate (FR-010)
         // ------------------------------------------------------------------
         ComponentKind::ActivityIndicator => {
@@ -1995,6 +2296,18 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
         Some(NativeHandle::HelpButtonWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::PopupButtonWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::BackButtonWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::CapacityIndicatorWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::RatingIndicatorWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::RelevanceIndicatorWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::TooltipWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::TimePickerWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::GraphicalTimePickerWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::ToolbarIconButtonWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::ToolbarSpacerWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::ToolbarDividerWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::ToolbarPopupWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::AlertDialogWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::SheetWidget(parent)) => unsafe { parent.addSubview(view) },
         _ => {}
     }
 }
@@ -2100,6 +2413,17 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::Stepper => (Some(120.0), Some(26.0)),
         ComponentKind::ColorWell => (Some(46.0), Some(26.0)),
         ComponentKind::DatePicker => (Some(180.0), Some(26.0)),
+        ComponentKind::CapacityIndicator => (Some(200.0), Some(16.0)),
+        ComponentKind::RatingIndicator => (Some(120.0), Some(20.0)),
+        ComponentKind::RelevanceIndicator => (Some(48.0), Some(16.0)),
+        ComponentKind::Tooltip => (None, Some(18.0)),
+        ComponentKind::TimePicker => (Some(100.0), Some(26.0)),
+        ComponentKind::GraphicalTimePicker => (Some(180.0), Some(160.0)),
+        ComponentKind::ToolbarIconButton => (Some(32.0), Some(28.0)),
+        ComponentKind::ToolbarDivider => (Some(1.0), Some(20.0)),
+        ComponentKind::ToolbarPopup => (Some(120.0), Some(26.0)),
+        ComponentKind::AlertDialog => (Some(300.0), Some(120.0)),
+        ComponentKind::Sheet => (None, None),
         ComponentKind::RadioGroup => {
             let options_count = shadow
                 .props

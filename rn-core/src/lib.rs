@@ -72,12 +72,28 @@ pub enum ComponentKind {
     ListTile,                                                  
     Scaffold,                                                  
     TitleBar,                                                  
-    // Batch 2 — button family (macos_ui parity)
-    IconButton,
-    DisclosureButton,
-    HelpButton,
-    PopupButton,
-    BackButton,
+    // Batch 2 — button family (macos_ui parity)               
+    IconButton,                                                
+    DisclosureButton,                                          
+    HelpButton,                                                
+    PopupButton,                                               
+    BackButton,                                                
+    // Batch 3 — indicators & labels (macos_ui parity)
+    CapacityIndicator,
+    RatingIndicator,
+    RelevanceIndicator,
+    Tooltip,
+    // Batch 4 — selectors (macos_ui parity)
+    TimePicker,
+    GraphicalTimePicker,
+    // Batch 5 — toolbar extras (macos_ui parity)
+    ToolbarIconButton,
+    ToolbarSpacer,
+    ToolbarDivider,
+    ToolbarPopup,
+    // Batch 6 — dialogs & sheets (macos_ui parity)
+    AlertDialog,
+    Sheet,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

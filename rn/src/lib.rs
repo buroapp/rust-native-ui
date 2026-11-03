@@ -620,6 +620,87 @@ pub fn back_button(on_press: HandlerId) -> ComponentBuilder {
         .prop(PropKey::OnPress, PropValue::HandlerRef(on_press))
 }
 
+/// Start building a `CapacityIndicator` — discrete capacity bar, e.g. disk usage
+/// (macos_ui `CapacityIndicator`).
+pub fn capacity_indicator(value: f32, max: f32) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::CapacityIndicator)
+        .prop(PropKey::Value, PropValue::F32(value))
+        .prop(PropKey::Max, PropValue::F32(max))
+}
+
+/// Start building a `RatingIndicator` — star rating (macos_ui `RatingIndicator`).
+pub fn rating_indicator(value: f32, max: f32) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::RatingIndicator)
+        .prop(PropKey::Value, PropValue::F32(value))
+        .prop(PropKey::Max, PropValue::F32(max))
+}
+
+/// Start building a `RelevanceIndicator` — search-relevance bars
+/// (macos_ui `RelevanceIndicator`).
+pub fn relevance_indicator(value: f32) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::RelevanceIndicator)
+        .prop(PropKey::Value, PropValue::F32(value))
+        .prop(PropKey::Max, PropValue::F32(1.0))
+}
+
+/// Start building a `Tooltip` — small popover-style label (macos_ui `MacosTooltip`).
+pub fn tooltip(text: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Tooltip)
+        .prop(PropKey::Text, PropValue::String(text.into()))
+}
+
+/// Start building a `TimePicker` — text field with steppers for hours/minutes
+/// (macos_ui `MacosTimePicker`).
+pub fn time_picker(value: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::TimePicker)
+        .prop(PropKey::DateValue, PropValue::String(value.into()))
+}
+
+/// Start building a `GraphicalTimePicker` — clock-face time picker
+/// (macos_ui `MacosGraphicalTimePicker`).
+pub fn graphical_time_picker(value: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::GraphicalTimePicker)
+        .prop(PropKey::DateValue, PropValue::String(value.into()))
+}
+
+/// Start building a `ToolbarIconButton` — SF Symbol button sized for a toolbar.
+pub fn toolbar_icon_button(symbol: impl Into<String>, on_press: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::ToolbarIconButton)
+        .prop(PropKey::IconName, PropValue::String(symbol.into()))
+        .prop(PropKey::OnPress, PropValue::HandlerRef(on_press))
+}
+
+/// A flexible spacer that pushes toolbar items apart (macos_ui `ToolbarSpacer`).
+pub fn toolbar_spacer() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::ToolbarSpacer).flex(1.0)
+}
+
+/// A vertical divider between toolbar items (macos_ui `ToolbarDivider`).
+pub fn toolbar_divider() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::ToolbarDivider)
+}
+
+/// Start building a `ToolbarPopup` — pull-down menu for a toolbar.
+pub fn toolbar_popup(options: Vec<String>, selected: usize, on_change: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::ToolbarPopup)
+        .prop(PropKey::Options, PropValue::StringList(options))
+        .prop(PropKey::SelectedIndex, PropValue::F32(selected as f32))
+        .prop(PropKey::OnChange, PropValue::HandlerRef(on_change))
+}
+
+/// Start building an `AlertDialog` — modal alert with title and message
+/// (macos_ui `MacosAlertDialog`).
+pub fn alert_dialog(title: impl Into<String>, message: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::AlertDialog)
+        .prop(PropKey::Title, PropValue::String(title.into()))
+        .prop(PropKey::Text, PropValue::String(message.into()))
+}
+
+/// Start building a `Sheet` — window-attached modal sheet (macos_ui `MacosSheet`).
+pub fn sheet() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Sheet).flex(1.0)
+}
+
 /// Start building a `Toolbar` component.
 pub fn toolbar(actions: Vec<ToolbarAction>) -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::Toolbar)
