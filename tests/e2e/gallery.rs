@@ -412,6 +412,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         fixed_width: None,
         fixed_height: None,
         min_width: None,
+        flex_grow: 0.0,
         min_height: None,
         children: vec![
             // hstack: label("Name:") + TextInput
@@ -423,6 +424,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
                 fixed_width: None,
                 fixed_height: None,
                 min_width: None,
+        flex_grow: 0.0,
                 min_height: None,
                 children: vec![
                     LayoutSpec {
@@ -433,6 +435,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
                         fixed_width: None,
                         fixed_height: Some(20.0),
                         min_width: Some(60.0), // renderer assigns 60px min to labels
+        flex_grow: 0.0,
                         min_height: None,
                         children: vec![],
                     },
@@ -444,6 +447,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
                         fixed_width: Some(200.0),
                         fixed_height: Some(24.0),
                         min_width: None,
+        flex_grow: 0.0,
                         min_height: None,
                         children: vec![],
                     },
@@ -458,6 +462,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
                 fixed_width: None,
                 fixed_height: Some(20.0),
                 min_width: Some(60.0),
+        flex_grow: 0.0,
                 min_height: None,
                 children: vec![],
             },
@@ -470,6 +475,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
                 fixed_width: None,
                 fixed_height: Some(20.0),
                 min_width: Some(60.0),
+        flex_grow: 0.0,
                 min_height: None,
                 children: vec![],
             },
@@ -482,6 +488,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
                 fixed_width: None,
                 fixed_height: None,
                 min_width: None,
+        flex_grow: 0.0,
                 min_height: None,
                 children: vec![
                     LayoutSpec {
@@ -492,6 +499,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
                         fixed_width: Some(120.0),
                         fixed_height: Some(32.0),
                         min_width: None,
+        flex_grow: 0.0,
                         min_height: None,
                         children: vec![],
                     },
@@ -503,6 +511,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
                         fixed_width: Some(120.0),
                         fixed_height: Some(32.0),
                         min_width: None,
+        flex_grow: 0.0,
                         min_height: None,
                         children: vec![],
                     },
@@ -514,6 +523,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
                         fixed_width: Some(120.0),
                         fixed_height: Some(32.0),
                         min_width: None,
+        flex_grow: 0.0,
                         min_height: None,
                         children: vec![],
                     },
@@ -528,6 +538,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
                 fixed_width: Some(120.0),
                 fixed_height: Some(32.0),
                 min_width: None,
+        flex_grow: 0.0,
                 min_height: None,
                 children: vec![],
             },

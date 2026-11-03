@@ -1337,6 +1337,13 @@ fn create_node(
             let gb: Retained<NSBox> = unsafe { NSBox::initWithFrame(mtm.alloc(), frame) };
             unsafe {
                 gb.setBoxType(NSBoxType::NSBoxCustom);
+                // Remove contentView margins so children sit flush with our layout rects
+                gb.setContentViewMargins(NSSize::new(0.0, 0.0));
+                // Subtle card background + border
+                gb.setFillColor(&NSColor::controlBackgroundColor());
+                gb.setBorderColor(&NSColor::separatorColor());
+                gb.setBorderWidth(1.0);
+                gb.setCornerRadius(8.0);
             }
             if let Some(PropValue::String(title)) = props.get(&PropKey::SectionTitle) {
                 unsafe { gb.setTitle(&NSString::from_str(title)) };
@@ -1606,9 +1613,16 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
         Some(NativeHandle::SplitViewWidget(sv)) => unsafe { sv.addArrangedSubview(view) },
         // Generic NSView-backed Phase-2 containers — plain addSubview
         Some(NativeHandle::SidebarWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::GroupedSectionWidget(parent)) => unsafe { parent.addSubview(view) },
+        // NSBox containers: children go into contentView so they appear inside the box
+        Some(NativeHandle::GroupedSectionWidget(parent)) => unsafe {
+            if let Some(cv) = parent.contentView() { cv.addSubview(view) }
+            else { parent.addSubview(view) }
+        },
+        Some(NativeHandle::CardWidget(parent)) => unsafe {
+            if let Some(cv) = parent.contentView() { cv.addSubview(view) }
+            else { parent.addSubview(view) }
+        },
         Some(NativeHandle::SafeAreaWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::CardWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::TouchableWidget(parent)) => unsafe { parent.addSubview(view) },
         _ => {}
     }
@@ -1732,8 +1746,8 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
                 .and_then(|v| if let PropValue::F32(f) = v { Some(*f) } else { None });
             (w, f32_opt(&shadow.props, PropKey::Height))
         },
-        ComponentKind::GroupedSection => (None, Some(f32_opt(&shadow.props, PropKey::Height).unwrap_or(80.0))),
-        ComponentKind::Card => (None, Some(f32_opt(&shadow.props, PropKey::Height).unwrap_or(60.0))),
+        ComponentKind::GroupedSection => (None, None), // auto-sized from children
+        ComponentKind::Card => (None, None), // auto-sized from children
         _ => (
             f32_opt(&shadow.props, PropKey::Width),
             f32_opt(&shadow.props, PropKey::Height),
@@ -1753,6 +1767,29 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         .iter()
         .filter_map(|c| build_spec(state, *c))
         .collect();
+
+    // flex_grow: fill available space when no fixed width/height is set.
+    // Used for containers that should expand to fill their parent (vstack
+    // content areas, GroupedSection, SearchBar, etc.)
+    let flex_grow = match shadow.kind {
+        // Full-fill containers: always expand
+        ComponentKind::LayoutContainer(_)
+        | ComponentKind::SafeAreaView
+        | ComponentKind::TouchableOpacity => 1.0,
+        // Fill-width containers (no fixed_width): expand horizontally
+        ComponentKind::GroupedSection
+        | ComponentKind::Card
+        | ComponentKind::SearchBar
+        | ComponentKind::TextArea
+        | ComponentKind::ScrollView
+        | ComponentKind::FlatList
+        | ComponentKind::RichText
+        | ComponentKind::Toolbar
+        | ComponentKind::Skeleton
+        | ComponentKind::Separator
+            if fixed_width.is_none() => 1.0,
+        _ => 0.0,
+    };
     Some(LayoutSpec {
         id: LayoutNodeId(node_id.0),
         axis,
@@ -1762,6 +1799,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         min_height,
         fixed_width,
         fixed_height,
+        flex_grow,
         children,
     })
 }

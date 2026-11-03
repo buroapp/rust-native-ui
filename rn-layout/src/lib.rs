@@ -50,6 +50,8 @@ pub struct LayoutSpec {
     pub min_height: Option<f32>,
     pub fixed_width: Option<f32>,
     pub fixed_height: Option<f32>,
+    /// `flex_grow`: 1.0 means fill remaining space; 0.0 (default) means fixed/shrink.
+    pub flex_grow: f32,
     pub children: Vec<LayoutSpec>,
 }
 
@@ -103,6 +105,7 @@ pub fn compute_layout(spec: &LayoutSpec, container: Rect) -> LayoutResult {
         let style = Style {
             display: Display::Flex,
             flex_direction,
+            flex_grow: spec.flex_grow,
             padding: Rect {
                 left: length(spec.padding),
                 right: length(spec.padding),
