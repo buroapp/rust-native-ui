@@ -23,7 +23,7 @@ fn main() -> Result<(), rn::RnError> {
         selected_folder: 0, selected_msg: 0, action_log: String::new(),
     }));
 
-    enum Msg { Folder(usize), Message(usize), Toolbar(String), Close }
+    enum Msg { Folder(usize), Message(usize), Toolbar(String) }
 
     let tx = rn::update_sender();
     let close_id = HandlerId::new();
@@ -143,7 +143,7 @@ fn main() -> Result<(), rn::RnError> {
                         Ok(Msg::Folder(i)) => { g.selected_folder = i; dirty = true; }
                         Ok(Msg::Message(i)) => { g.selected_msg = i; dirty = true; }
                         Ok(Msg::Toolbar(a)) => { g.action_log = format!("Toolbar: {a}"); dirty = true; }
-                        Ok(Msg::Close) | Err(_) => {}
+                        Err(_) => {}
                     }
                 }
             }

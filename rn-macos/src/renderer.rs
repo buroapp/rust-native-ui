@@ -36,7 +36,7 @@ use objc2_app_kit::{
     NSVisualEffectState,
 };
 // Phase 2 extra imports for RichText attributed string rendering (FR-008)
-use objc2_app_kit::{NSFont, NSForegroundColorAttributeName, NSFontAttributeName};
+use objc2_app_kit::{NSFont, NSFontManager, NSForegroundColorAttributeName, NSFontAttributeName};
 use objc2_foundation::NSMutableAttributedString;
 use objc2_foundation::{
     MainThreadMarker, NSDate,
@@ -1075,7 +1075,7 @@ fn create_node(
             // Build attributed string from spans (FR-008)
             if let Some(PropValue::Spans(spans)) = props.get(&PropKey::TextSpans) {
                 if !spans.is_empty() {
-                    let attr_str = build_attributed_string(spans);
+                    let attr_str = build_attributed_string(spans, mtm);
                     if let Some(mut storage) = unsafe { tv.textStorage() } {
                         storage.setAttributedString(&attr_str);
                     } else {
@@ -1713,7 +1713,7 @@ fn bool_prop(props: &Props, key: PropKey, default: bool) -> bool {
 /// Build an `NSMutableAttributedString` from a list of `StyledSpan` values.
 /// Uses plain text concatenation for now; bold is applied via NSFont.
 /// (FR-008 — colored/styled spans via NSAttributedString)
-fn build_attributed_string(spans: &[rn_core::StyledSpan]) -> Retained<NSMutableAttributedString> {
+fn build_attributed_string(spans: &[rn_core::StyledSpan], mtm: MainThreadMarker) -> Retained<NSMutableAttributedString> {
     let full_text: String = spans.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join("");
     let ns_text = NSString::from_str(&full_text);
     // Build a base attributed string with the full plain text.
@@ -1724,13 +1724,23 @@ fn build_attributed_string(spans: &[rn_core::StyledSpan]) -> Retained<NSMutableA
     for span in spans {
         let span_len = span.text.chars().count();
         let range = objc2_foundation::NSRange::new(offset, span_len);
-        // Font
+        // Font — handle bold, italic, bold+italic (FR-008)
         let font: Retained<NSFont> = unsafe {
             let size: f64 = span.font_size.unwrap_or(13.0) as f64;
-            if span.bold {
+            let base: Retained<NSFont> = if span.bold {
                 NSFont::boldSystemFontOfSize(size)
             } else {
                 NSFont::systemFontOfSize(size)
+            };
+            if span.italic {
+                // Use NSFontManager to add italic trait
+                let fm = NSFontManager::sharedFontManager(mtm);
+                let italic_mask = objc2_app_kit::NSFontTraitMask(
+                    objc2_app_kit::NSFontTraitMask::NSItalicFontMask.0,
+                );
+                fm.convertFont_toHaveTrait(&base, italic_mask)
+            } else {
+                base
             }
         };
         // Use msg_send! directly to call addAttribute:value:range: since Retained<NSMutableAttributedString>
