@@ -33,7 +33,7 @@
 #[cfg(all(target_os = "macos", feature = "macos"))]
 fn main() -> Result<(), rn::RnError> {
     use std::sync::{Arc, Mutex};
-    use rn::{ColorValue, HandlerId, UpdateMessage};
+    use rn::{ColorValue, HandlerId, PropKey, PropValue, UpdateMessage};
     use rn::backend::MacosRenderer;
 
     env_logger::init();
@@ -123,6 +123,18 @@ fn main() -> Result<(), rn::RnError> {
 
     let date_id = HandlerId::new();
     { let tx = tx.clone(); rn::on(date_id, move |_| { let _ = tx.send(UpdateMessage::new(Msg::DateChange)); }); }
+
+    // macos_ui parity demo handlers
+    let star_id = HandlerId::new();
+    let back_id = HandlerId::new();
+    let help_id = HandlerId::new();
+    let disc_id = HandlerId::new();
+    let gear_id = HandlerId::new();
+    let popupb_id = HandlerId::new();
+    for id in [star_id, back_id, help_id, disc_id, gear_id, popupb_id] {
+        let tx = tx.clone();
+        rn::on(id, move |_| { let _ = tx.send(UpdateMessage::new(Msg::DateChange)); });
+    }
 
     let dropdown_options = vec![
         "Option A".to_string(),
@@ -285,6 +297,51 @@ fn main() -> Result<(), rn::RnError> {
                                 rn::text_area("Type multiple\nlines here…")
                                     .build()
                             )
+                            .child(rn::separator())
+                            // ── macos_ui parity widgets ─────────────────────
+                            .child(rn::label("── macos_ui parity ────────────────────────────"))
+                            .child(
+                                rn::hstack().gap(8.0)
+                                    .child(rn::icon_button("star", star_id).build())
+                                    .child(rn::back_button(back_id).build())
+                                    .child(rn::help_button("Help", help_id).build())
+                                    .child(rn::disclosure_button("Disclosure", disc_id).build())
+                                    .child(rn::toolbar_icon_button("gear", gear_id).build())
+                                    .child(rn::toolbar_divider().build())
+                                    .child(rn::popup_button(
+                                        vec!["Option A".into(), "Option B".into()],
+                                        0, popupb_id,
+                                    ).build())
+                                    .build()
+                            )
+                            .child(
+                                rn::hstack().gap(8.0)
+                                    .child(rn::label_w("Capacity", 70.0))
+                                    .child(rn::capacity_indicator(70.0, 100.0).build())
+                                    .build()
+                            )
+                            .child(
+                                rn::hstack().gap(8.0)
+                                    .child(rn::label_w("Rating", 70.0))
+                                    .child(rn::rating_indicator(4.0, 5.0).build())
+                                    .child(rn::label_w("Relevance", 70.0))
+                                    .child(rn::relevance_indicator(0.75).build())
+                                    .build()
+                            )
+                            .child(
+                                rn::hstack().gap(8.0)
+                                    .child(rn::label_w("Time", 70.0))
+                                    .child(rn::time_picker("10:30").build())
+                                    .build()
+                            )
+                            .child(
+                                rn::hstack().gap(8.0)
+                                    .child(rn::list_tile("ListTile row")
+                                        .prop(PropKey::IconName, PropValue::String("folder".into()))
+                                        .build())
+                                    .build()
+                            )
+                            .child(rn::tooltip("This is a tooltip").build())
                             .child(rn::separator())
                             // ── Design system (Phase 2) ──────────────────────
                             .child(rn::label("── Design System ─────────────────────────────"))
