@@ -29,14 +29,14 @@ use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSBezelStyle, NSButton,
     NSColor, NSColorWell, NSControlTextEditingDelegate, NSControlStateValueOff, NSControlStateValueOn,
     NSDatePicker, NSDatePickerStyle, NSImageView, NSPopUpButton, NSProgressIndicator,
-    NSProgressIndicatorStyle, NSScrollView, NSSlider, NSTextField, NSTextFieldDelegate,
+    NSScrollView, NSSlider, NSTextField, NSTextFieldDelegate,
     NSTextView, NSStepper, NSView, NSWindow, NSWindowDelegate, NSWindowStyleMask,
     NSBox, NSBoxType, NSImage, NSSearchField, NSSegmentedControl, NSSwitch, NSSplitView,
-    NSTextAlignment, NSTitlePosition, NSVisualEffectView, NSVisualEffectMaterial,
-    NSVisualEffectState, NSFont, NSFontDescriptor, NSToolbar, NSToolbarItem,
+    NSTitlePosition, NSVisualEffectView, NSVisualEffectMaterial,
+    NSVisualEffectState,
 };
 use objc2_foundation::{
-    MainThreadMarker, NSAttributedString, NSDate, NSMutableAttributedString,
+    MainThreadMarker, NSDate,
     NSNotification, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize,
     NSString, NSTimer,
 };
@@ -44,6 +44,7 @@ use objc2_foundation::{
 use rn_core::{
     ApplyBridge, Axis, Changeset, ColorValue, ComponentKind, Event, EventKind, EventPayload,
     HandlerId, NodeId, Operation, PlatformRenderer, PropKey, PropValue, Props, RenderError,
+    ScrollEvent,
 };
 use rn_layout::{compute_layout, LayoutAxis, LayoutNodeId, LayoutSpec, Rect};
 
@@ -808,6 +809,10 @@ fn create_node(
                 sv.setHasHorizontalScroller(false);
                 sv.setAutohidesScrollers(true);
                 sv.setDrawsBackground(false);
+                // Enable bounds-change notifications so on_scroll can be wired
+                // via NotificationCenter in a future delegate implementation.
+                let clip = sv.contentView();
+                clip.setPostsBoundsChangedNotifications(true);
             }
             attach_to_parent(state, parent_id, &sv);
             state.nodes.insert(node_id, NativeHandle::ScrollViewWidget(sv));
@@ -841,7 +846,7 @@ fn create_node(
         ComponentKind::TouchableOpacity => {
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(100.0, 40.0));
             let view: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
-            unsafe { view.setWantsLayer(true) };
+            view.setWantsLayer(true);
             attach_to_parent(state, parent_id, &view);
             state.nodes.insert(node_id, NativeHandle::TouchableWidget(view));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
@@ -889,7 +894,7 @@ fn create_node(
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(10.0, 10.0));
             let view: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
             if !visible {
-                unsafe { view.setHidden(true) };
+                view.setHidden(true);
             }
             attach_to_parent(state, parent_id, &view);
             state.nodes.insert(node_id, NativeHandle::View(view, ContainerInfo { axis: Axis::Vertical, padding: 0.0, gap: 0.0 }));
@@ -903,7 +908,7 @@ fn create_node(
         ComponentKind::Popover => {
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(10.0, 10.0));
             let view: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
-            unsafe { view.setHidden(true) };
+            view.setHidden(true);
             attach_to_parent(state, parent_id, &view);
             state.nodes.insert(node_id, NativeHandle::View(view, ContainerInfo { axis: Axis::Vertical, padding: 0.0, gap: 0.0 }));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
@@ -928,6 +933,17 @@ fn create_node(
                 let plain = spans.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join("");
                 let ns = NSString::from_str(&plain);
                 unsafe { tv.setString(&ns) };
+            }
+            // Apply text wrap setting (FR-009)
+            let wrap = bool_prop(&props, PropKey::TextWrap, true);
+            if let Some(tc) = unsafe { tv.textContainer() } {
+                unsafe {
+                    tc.setWidthTracksTextView(wrap);
+                    tc.setHeightTracksTextView(false);
+                    if !wrap {
+                        tc.setContainerSize(NSSize::new(f64::MAX, f64::MAX));
+                    }
+                }
             }
             attach_to_parent(state, parent_id, &tv);
             state.nodes.insert(node_id, NativeHandle::RichTextWidget(tv));
@@ -983,7 +999,6 @@ fn create_node(
             let w = f32_prop(&props, PropKey::Width, 100.0);
             let h = f32_prop(&props, PropKey::Height, 20.0);
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w as f64, h as f64));
-            let view: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
             // Skeleton renders as a gray NSBox placeholder (shimmer via CALayer in future)
             let skel_box: Retained<NSBox> = unsafe { NSBox::initWithFrame(mtm.alloc(), frame) };
             unsafe { skel_box.setBoxType(NSBoxType::NSBoxCustom) };
@@ -1609,6 +1624,7 @@ declare_class!(
                 handler: ivars.handler,
                 kind: ivars.kind,
                 payload: EventPayload::None,
+                stop_bubbling: false,
             };
             with_state(|s| s.pending_events.push(event.clone()));
             rn_core::dispatch_event(event);
@@ -1651,6 +1667,7 @@ declare_class!(
                 handler: ivars.handler,
                 kind: EventKind::Close,
                 payload: EventPayload::None,
+                stop_bubbling: false,
             };
             rn_core::dispatch_event(event);
             true
@@ -1720,6 +1737,7 @@ declare_class!(
                 handler: ivars.handler,
                 kind: EventKind::Change,
                 payload: EventPayload::Text(text),
+                stop_bubbling: false,
             };
             rn_core::dispatch_event(event);
         }
@@ -1758,6 +1776,40 @@ declare_class!(
             let events: Vec<Event> =
                 with_state(|s| std::mem::take(&mut s.pending_events)).unwrap_or_default();
             for e in events {
+                rn_core::dispatch_event(e);
+            }
+            // Poll scroll positions for ScrollView nodes that have an OnScroll handler.
+            // This fires EventPayload::Scroll when the contentView bounds change.
+            let scroll_events = with_state(|s| {
+                let mut evts = Vec::new();
+                for (node_id, handle) in &s.nodes {
+                    if let NativeHandle::ScrollViewWidget(sv) = handle {
+                        if let Some(shadow) = s.shadow.get(node_id) {
+                            if let Some(PropValue::HandlerRef(h)) = shadow.props.get(&PropKey::OnScroll) {
+                                let clip = unsafe { sv.contentView() };
+                                let bounds = clip.bounds();
+                                let offset_y = bounds.origin.y as f32;
+                                let offset_x = bounds.origin.x as f32;
+                                let event = Event {
+                                    source: *node_id,
+                                    handler: *h,
+                                    kind: EventKind::Change,
+                                    payload: EventPayload::Scroll(ScrollEvent {
+                                        offset_x,
+                                        offset_y,
+                                        velocity_x: 0.0,
+                                        velocity_y: 0.0,
+                                    }),
+                                    stop_bubbling: false,
+                                };
+                                evts.push(event);
+                            }
+                        }
+                    }
+                }
+                evts
+            }).unwrap_or_default();
+            for e in scroll_events {
                 rn_core::dispatch_event(e);
             }
             rn_core::tick();

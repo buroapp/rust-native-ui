@@ -408,8 +408,13 @@ pub fn scroll_view() -> ComponentBuilder {
 }
 
 /// Start building a `FlatList` component.
-pub fn flat_list() -> ComponentBuilder {
+///
+/// - `render_item`: a `HandlerId` whose handler will be called with
+///   `EventPayload::Index(i)` for each visible row; it must call
+///   `rn::rerender(tree)` to update that row's component.
+pub fn flat_list(render_item: HandlerId) -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::FlatList)
+        .prop(PropKey::RenderItem, PropValue::HandlerRef(render_item))
 }
 
 /// Start building a `TouchableOpacity` component.

@@ -172,6 +172,9 @@ pub enum PropKey {
     OnSubmit,
     // Phase 2 — switch
     SwitchValue,
+    // Phase 2 — FlatList callbacks
+    RenderItem,
+    KeyExtractor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -499,6 +502,9 @@ pub struct Event {
     pub handler: HandlerId,
     pub kind: EventKind,
     pub payload: EventPayload,
+    /// When set to `true` by a consumer handler, prevents the event from
+    /// propagating further up the component tree (FR-015).
+    pub stop_bubbling: bool,
 }
 
 // ---------------------------------------------------------------------------

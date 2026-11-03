@@ -286,6 +286,25 @@ fn main() -> Result<(), rn::RnError> {
                                     .build()
                             )
                             .child(rn::separator())
+                            // ── Design system (Phase 2) ──────────────────────
+                            .child(rn::label("── Design System ─────────────────────────────"))
+                            .child(
+                                rn::hstack().gap(8.0)
+                                    .child(rn::card()
+                                        .child(rn::label("Card component"))
+                                        .build())
+                                    .build()
+                            )
+                            .child(
+                                rn::hstack().gap(8.0)
+                                    .child(rn::badge("Default").build())
+                                    .child(rn::badge("Destructive").build())
+                                    .child(rn::badge("Success").build())
+                                    .build()
+                            )
+                            .child(rn::skeleton(180.0, 16.0).build())
+                            .child(rn::skeleton(140.0, 16.0).build())
+                            .child(rn::separator())
                             // ── Status bar ──────────────────────────────────
                             .child(rn::label(format!("Status: {}", s.status)))
                             .build(),

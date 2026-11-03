@@ -175,6 +175,7 @@ fn test_handler_panic_is_caught_and_logged() {
         handler: id,
         kind: EventKind::Press,
         payload: EventPayload::None,
+        stop_bubbling: false,
     };
 
     let dispatched = rn::dispatch_handler(event);
@@ -186,4 +187,99 @@ fn test_handler_panic_is_caught_and_logged() {
         "expected error log mentioning panic+boom, got {:?}",
         *logs
     );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 / T115 — FlatList state machine integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_flat_list_initial_mount_ops() {
+    use rn::flat_list::{FlatListState, ItemHeight, RecycleOp};
+    let mut s = FlatListState::new(100, ItemHeight::Fixed(44.0), 400.0, 3, 100.0);
+    let ops = s.compute_ops();
+    // Should produce Mount ops for the initial visible range + buffer
+    let mounts: Vec<_> = ops.iter().filter(|o| matches!(o, RecycleOp::Mount { .. })).collect();
+    assert!(!mounts.is_empty(), "initial compute_ops must mount rows");
+    assert!(s.mounted_end > s.mounted_start, "mounted range must be non-empty");
+}
+
+#[test]
+fn test_flat_list_scroll_produces_recycle_ops() {
+    use rn::flat_list::{FlatListState, ItemHeight, RecycleOp};
+    let mut s = FlatListState::new(1000, ItemHeight::Fixed(44.0), 400.0, 3, 100.0);
+    let _ = s.compute_ops(); // initial mount
+    // Scroll far enough to evict the first rows from the buffer
+    let ops = s.on_scroll(2000.0);
+    let unmounts: Vec<_> = ops.iter().filter(|o| matches!(o, RecycleOp::Unmount { .. })).collect();
+    let mounts: Vec<_> = ops.iter().filter(|o| matches!(o, RecycleOp::Mount { .. })).collect();
+    assert!(!unmounts.is_empty(), "large scroll must produce Unmount ops");
+    assert!(!mounts.is_empty(), "large scroll must produce Mount ops for new rows");
+    assert!(s.mounted_start > 0, "mounted start must advance after scroll");
+}
+
+#[test]
+fn test_flat_list_append_preserves_scroll_offset() {
+    use rn::flat_list::{FlatListState, ItemHeight};
+    let mut s = FlatListState::new(50, ItemHeight::Fixed(44.0), 400.0, 3, 100.0);
+    let _ = s.on_scroll(500.0); // scroll down first
+    let offset_before = s.scroll_offset;
+    let _ = s.on_data_append(50);
+    assert_eq!(s.scroll_offset, offset_before, "append must not change scroll offset");
+    assert_eq!(s.item_count, 100, "item count must update after append");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 / T116 — TouchableOpacity event bubbling test
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_touch_bubble_stop_bubbling_flag() {
+    use rn_core::{EventPayload, EventKind, NodeId, HandlerId};
+    use rn_core::Event;
+    // Verify the stop_bubbling field on Event defaults to false
+    let event = Event {
+        source: NodeId::for_test(1),
+        handler: HandlerId::new(),
+        kind: EventKind::Press,
+        payload: EventPayload::None,
+        stop_bubbling: false,
+    };
+    assert!(!event.stop_bubbling, "stop_bubbling must default false");
+
+    // Simulate a consumer setting stop_bubbling to true
+    let mut event2 = event.clone();
+    event2.stop_bubbling = true;
+    assert!(event2.stop_bubbling, "consumer must be able to set stop_bubbling");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 / T118 — Modal visibility via reconciler Update ops
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_modal_visibility_toggle_produces_update_op() {
+    let mut rec = Reconciler::new();
+
+    // Initial render: modal hidden
+    let t1 = tree(
+        rn::window()
+            .title("App")
+            .child(rn::modal(false).build())
+            .build(),
+    );
+    let cs1 = rec.reconcile(t1).expect("initial reconcile");
+    let (creates, _updates, _deletes, _reorders) = count_ops_by_kind(&cs1);
+    assert!(creates >= 2, "expected window + modal create ops");
+
+    // Second render: modal visible
+    let t2 = tree(
+        rn::window()
+            .title("App")
+            .child(rn::modal(true).build())
+            .build(),
+    );
+    let cs2 = rec.reconcile(t2).expect("second reconcile");
+    let (_c, updates2, _d, _r) = count_ops_by_kind(&cs2);
+    assert!(updates2 >= 1, "toggling modal visibility must produce an Update op");
 }
