@@ -34,7 +34,7 @@ fn main() -> Result<(), rn::RnError> {
         selected: 0, wifi: true, bluetooth: true, appearance: 0, search: String::new(),
     }));
 
-    enum Msg { Select(usize), Wifi, Bluetooth, Appearance(i32), Search(String), Close }
+    enum Msg { Select(usize), Wifi, Bluetooth, Appearance(i32), Search(String) }
 
     let tx = rn::update_sender();
     let close_id = HandlerId::new();
@@ -152,7 +152,7 @@ fn main() -> Result<(), rn::RnError> {
                         Ok(Msg::Bluetooth) => { g.bluetooth = !g.bluetooth; dirty = true; }
                         Ok(Msg::Appearance(i)) => { g.appearance = i; dirty = true; }
                         Ok(Msg::Search(s)) => { g.search = s; dirty = true; }
-                        Ok(Msg::Close) | Err(_) => {}
+                        Err(_) => {}
                     }
                 }
             }
@@ -168,7 +168,7 @@ fn main() -> Result<(), rn::RnError> {
 #[cfg(all(target_os = "macos", feature = "macos"))]
 fn run_bench_flatlist() -> Result<(), rn::RnError> {
     use std::sync::{Arc, Mutex};
-    use rn::{ComponentTree, HandlerId, UpdateMessage};
+    use rn::{ComponentTree, HandlerId};
     use rn::backend::MacosRenderer;
 
     env_logger::init();

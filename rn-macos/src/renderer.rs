@@ -1528,6 +1528,14 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
             }
         }
         Some(NativeHandle::View(parent, _)) => unsafe { parent.addSubview(view) },
+        // NSSplitView requires addArrangedSubview to participate in split layout
+        Some(NativeHandle::SplitViewWidget(sv)) => unsafe { sv.addArrangedSubview(view) },
+        // Generic NSView-backed Phase-2 containers — plain addSubview
+        Some(NativeHandle::SidebarWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::GroupedSectionWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::SafeAreaWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::CardWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::TouchableWidget(parent)) => unsafe { parent.addSubview(view) },
         _ => {}
     }
 }
@@ -1594,6 +1602,15 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
     let axis = match shadow.kind {
         ComponentKind::LayoutContainer(Axis::Horizontal) => LayoutAxis::Horizontal,
         ComponentKind::LayoutContainer(Axis::Vertical) => LayoutAxis::Vertical,
+        // Phase-2 containers act as vertical stacks for their children
+        ComponentKind::SplitView => LayoutAxis::Horizontal, // panes side-by-side
+        ComponentKind::Sidebar
+        | ComponentKind::SafeAreaView
+        | ComponentKind::GroupedSection
+        | ComponentKind::Card
+        | ComponentKind::TouchableOpacity
+        | ComponentKind::Modal
+        | ComponentKind::Popover => LayoutAxis::Vertical,
         _ => LayoutAxis::None,
     };
     let padding = f32_prop(&shadow.props, PropKey::Padding, 0.0);
@@ -1621,6 +1638,31 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
                 .unwrap_or(0);
             (Some(180.0), Some((options_count as f32) * 24.0))
         }
+        // Phase-2 leaf widgets — fixed intrinsic sizes
+        ComponentKind::Switch => (Some(51.0), Some(31.0)),
+        ComponentKind::ActivityIndicator => (Some(32.0), Some(32.0)),
+        ComponentKind::Badge => (Some(40.0), Some(20.0)),
+        ComponentKind::Skeleton => (None, Some(20.0)),
+        ComponentKind::SegmentedControl => (Some(220.0), Some(28.0)),
+        ComponentKind::SearchBar => (None, Some(28.0)),
+        ComponentKind::StatusBar => (None, Some(22.0)),
+        ComponentKind::SidebarItem => (None, Some(28.0)),
+        ComponentKind::RichText => (None, Some(80.0)),
+        ComponentKind::FlatList => (None, Some(300.0)),
+        ComponentKind::ScrollView => (None, Some(200.0)),
+        // Phase-2 containers — fill from props, fall back to flex/grow
+        ComponentKind::SplitView
+        | ComponentKind::Sidebar
+        | ComponentKind::SafeAreaView
+        | ComponentKind::GroupedSection
+        | ComponentKind::Card
+        | ComponentKind::TouchableOpacity
+        | ComponentKind::Modal
+        | ComponentKind::Popover
+        | ComponentKind::Toolbar => (
+            f32_opt(&shadow.props, PropKey::Width),
+            f32_opt(&shadow.props, PropKey::Height),
+        ),
         _ => (
             f32_opt(&shadow.props, PropKey::Width),
             f32_opt(&shadow.props, PropKey::Height),
@@ -1684,6 +1726,16 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
                 }
             };
 
+        // Skip direct children of NSSplitView — NSSplitView manages pane frames internally
+        // via addArrangedSubview. Applying our frames would collapse them to zero.
+        let is_splitview_child = shadow_parent_id
+            .and_then(|pid| state.nodes.get(&pid))
+            .map(|h| matches!(h, NativeHandle::SplitViewWidget(_)))
+            .unwrap_or(false);
+        if is_splitview_child {
+            continue;
+        }
+
         // Flip y from taffy (top-left origin) to AppKit (bottom-left origin).
         let flipped_y = superview_height - local_y - rect.height;
         let ns = NSRect::new(
@@ -1696,6 +1748,20 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
             rect.x, rect.y, shadow_parent_id
         );
         unsafe { view.setFrame(ns) };
+
+        // After sizing a NSSplitView, distribute panes equally by setting divider positions.
+        if let Some(NativeHandle::SplitViewWidget(sv)) = state.nodes.get(&node_id) {
+            let pane_count = state.shadow.get(&node_id)
+                .map(|s| s.children.len())
+                .unwrap_or(0);
+            if pane_count > 1 {
+                let step = rect.width / pane_count as f32;
+                for i in 0..(pane_count - 1) {
+                    let pos = step * (i as f32 + 1.0);
+                    unsafe { sv.setPosition_ofDividerAtIndex(pos as f64, i as isize) };
+                }
+            }
+        }
     }
 }
 
