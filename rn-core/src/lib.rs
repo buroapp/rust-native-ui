@@ -6,6 +6,12 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
+pub mod capabilities;
+pub mod handle_store;
+
+pub use capabilities::{coverage_report, CapabilityReport};
+pub use handle_store::HandleStore;
+
 // ---------------------------------------------------------------------------
 // NodeId
 // ---------------------------------------------------------------------------
@@ -94,6 +100,76 @@ pub enum ComponentKind {
     // Batch 6 — dialogs & sheets (macos_ui parity)
     AlertDialog,
     Sheet,
+}
+
+impl ComponentKind {
+    /// Every distinct component kind, with the layout container collapsed to one
+    /// representative value. Backends use this to declare and test completeness:
+    /// a backend's `capabilities()` must cover this list exactly.
+    pub const ALL: &'static [ComponentKind] = &[
+        ComponentKind::Window,
+        ComponentKind::Label,
+        ComponentKind::Button,
+        ComponentKind::TextInput,
+        ComponentKind::LayoutContainer(Axis::Vertical),
+        ComponentKind::Checkbox,
+        ComponentKind::Slider,
+        ComponentKind::ProgressBar,
+        ComponentKind::Separator,
+        ComponentKind::TextArea,
+        ComponentKind::Dropdown,
+        ComponentKind::Image,
+        ComponentKind::Stepper,
+        ComponentKind::ColorWell,
+        ComponentKind::DatePicker,
+        ComponentKind::RadioGroup,
+        ComponentKind::ScrollView,
+        ComponentKind::FlatList,
+        ComponentKind::TouchableOpacity,
+        ComponentKind::SafeAreaView,
+        ComponentKind::ActivityIndicator,
+        ComponentKind::Modal,
+        ComponentKind::Popover,
+        ComponentKind::RichText,
+        ComponentKind::Card,
+        ComponentKind::Badge,
+        ComponentKind::Skeleton,
+        ComponentKind::SegmentedControl,
+        ComponentKind::SearchBar,
+        ComponentKind::Sidebar,
+        ComponentKind::SidebarItem,
+        ComponentKind::GroupedSection,
+        ComponentKind::SplitView,
+        ComponentKind::Toolbar,
+        ComponentKind::Switch,
+        ComponentKind::StatusBar,
+        ComponentKind::ContentArea,
+        ComponentKind::ListTile,
+        ComponentKind::Scaffold,
+        ComponentKind::TitleBar,
+        ComponentKind::IconButton,
+        ComponentKind::DisclosureButton,
+        ComponentKind::HelpButton,
+        ComponentKind::PopupButton,
+        ComponentKind::BackButton,
+        ComponentKind::CapacityIndicator,
+        ComponentKind::RatingIndicator,
+        ComponentKind::RelevanceIndicator,
+        ComponentKind::Tooltip,
+        ComponentKind::TimePicker,
+        ComponentKind::GraphicalTimePicker,
+        ComponentKind::ToolbarIconButton,
+        ComponentKind::ToolbarSpacer,
+        ComponentKind::ToolbarDivider,
+        ComponentKind::ToolbarPopup,
+        ComponentKind::AlertDialog,
+        ComponentKind::Sheet,
+    ];
+
+    /// Number of distinct component kinds. `ComponentKind::ALL.len()` must equal
+    /// this; a test enforces it so a new variant cannot be added without
+    /// appearing in `ALL`, which is what forces backends to implement it.
+    pub const COUNT: usize = 57;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

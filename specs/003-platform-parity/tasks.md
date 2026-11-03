@@ -24,8 +24,8 @@ Cargo workspace at repository root. Backend crates `rn-windows/` and `rn-linux/`
 
 **Purpose**: Dependency and module scaffolding for both backends
 
-- [ ] T001 Add Win32 feature set to the `windows` dependency in `/Users/I779886/Developer/rust-native-ui/Cargo.toml` — `Win32_Foundation`, `Win32_UI_Controls`, `Win32_UI_WindowsAndMessaging`, `Win32_Graphics_Gdi`, `Win32_System_LibraryLoader`, `Win32_UI_HiDpi`
-- [ ] T002 [P] Add `gtk4` (with `v4_8` feature) to workspace dependencies in `/Users/I779886/Developer/rust-native-ui/Cargo.toml` and wire it into `/Users/I779886/Developer/rust-native-ui/rn-linux/Cargo.toml`
+- [X] T001 Add Win32 feature set to the `windows` dependency in `/Users/I779886/Developer/rust-native-ui/Cargo.toml` — `Win32_Foundation`, `Win32_UI_Controls`, `Win32_UI_WindowsAndMessaging`, `Win32_Graphics_Gdi`, `Win32_System_LibraryLoader`, `Win32_UI_HiDpi`
+- [X] T002 [P] Add `gtk4` (with `v4_8` feature) to workspace dependencies in `/Users/I779886/Developer/rust-native-ui/Cargo.toml` and wire it into `/Users/I779886/Developer/rust-native-ui/rn-linux/Cargo.toml`
 - [ ] T003 [P] Create module skeleton in `/Users/I779886/Developer/rust-native-ui/rn-windows/src/` — declare `app`, `renderer`, `capabilities`, `controls` in `lib.rs`, create `controls/mod.rs` and the seven family modules
 - [ ] T004 [P] Create module skeleton in `/Users/I779886/Developer/rust-native-ui/rn-linux/src/` — declare `app`, `renderer`, `capabilities`, `widgets` in `lib.rs`, create `widgets/mod.rs` and the seven family modules
 - [ ] T005 Verify exactly-one-backend gating compiles: `cargo build -p rn --features windows` and `--features linux` both succeed, and `cargo build -p rn --features windows,macos` fails loudly. Add a compile error if two backend features are enabled, in `/Users/I779886/Developer/rust-native-ui/rn/src/lib.rs` (FR-007)
@@ -40,11 +40,11 @@ Cargo workspace at repository root. Backend crates `rn-windows/` and `rn-linux/`
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T006 Add `pub const COUNT: usize` to `ComponentKind` and a `pub const ALL: &[ComponentKind]` slice in `/Users/I779886/Developer/rust-native-ui/rn-core/src/lib.rs`, kept in sync by a unit test that asserts `ALL.len() == COUNT` and that every variant appears exactly once
-- [ ] T007 [P] Add a shared capability-coverage test helper as a macro or function in `/Users/I779886/Developer/rust-native-ui/rn-core/src/lib.rs` (test-only), asserting that a backend's `capabilities()` contains every kind in `ComponentKind::ALL` exactly once
-- [ ] T008 [P] Define `ControlRecord` and the dense `Vec<Option<ControlRecord>>` store with geometric growth in `/Users/I779886/Developer/rust-native-ui/rn-windows/src/renderer.rs` per research R3 and data-model ControlRecord
-- [ ] T009 [P] Define the equivalent store in `/Users/I779886/Developer/rust-native-ui/rn-linux/src/renderer.rs`
-- [ ] T010 Add display detection helper for Linux tests in `/Users/I779886/Developer/rust-native-ui/rn-linux/src/app.rs` — returns whether `WAYLAND_DISPLAY` or `DISPLAY` is set, used to skip windowed tests with a printed reason per research R5
+- [X] T006 Add `pub const COUNT: usize` to `ComponentKind` and a `pub const ALL: &[ComponentKind]` slice in `/Users/I779886/Developer/rust-native-ui/rn-core/src/lib.rs`, kept in sync by a unit test that asserts `ALL.len() == COUNT` and that every variant appears exactly once
+- [X] T007 [P] Add a shared capability-coverage test helper as a macro or function in `/Users/I779886/Developer/rust-native-ui/rn-core/src/lib.rs` (test-only), asserting that a backend's `capabilities()` contains every kind in `ComponentKind::ALL` exactly once
+- [X] T008 [P] Define `ControlRecord` and the dense `Vec<Option<ControlRecord>>` store with geometric growth in `/Users/I779886/Developer/rust-native-ui/rn-windows/src/renderer.rs` per research R3 and data-model ControlRecord
+- [X] T009 [P] Define the equivalent store in `/Users/I779886/Developer/rust-native-ui/rn-linux/src/renderer.rs`
+- [X] T010 Add display detection helper for Linux tests in `/Users/I779886/Developer/rust-native-ui/rn-linux/src/app.rs` — returns whether `WAYLAND_DISPLAY` or `DISPLAY` is set, used to skip windowed tests with a printed reason per research R5
 
 **Checkpoint**: Completeness machinery exists; both stores compile; no controls implemented yet
 
@@ -128,7 +128,7 @@ Cargo workspace at repository root. Backend crates `rn-windows/` and `rn-linux/`
 
 - [ ] T041 [US3] Add a debug layout-dump mode to the Windows backend in `/Users/I779886/Developer/rust-native-ui/rn-windows/src/renderer.rs` routing through `log::debug!` in the same format the macOS backend already emits
 - [ ] T042 [P] [US3] Add the equivalent layout-dump mode in `/Users/I779886/Developer/rust-native-ui/rn-linux/src/renderer.rs`
-- [ ] T043 [US3] Add a cross-platform geometry assertion test in `/Users/I779886/Developer/rust-native-ui/rn-layout/tests/cross_platform.rs` proving `compute_layout` is platform-independent — run the same spec twice and assert identical results, establishing that any divergence observed in practice comes from the backend, not the engine
+- [X] T043 [US3] Add a cross-platform geometry assertion test in `/Users/I779886/Developer/rust-native-ui/rn-layout/tests/cross_platform.rs` proving `compute_layout` is platform-independent — run the same spec twice and assert identical results, establishing that any divergence observed in practice comes from the backend, not the engine
 - [ ] T044 [US3] Audit both new backends for geometry computation outside the shared layout result — grep for arithmetic on positions and sizes in `/Users/I779886/Developer/rust-native-ui/rn-windows/src/` and `/Users/I779886/Developer/rust-native-ui/rn-linux/src/`, remove any found. Permitted transformation is the Y-axis flip only (contract C3, FR-008)
 
 **Checkpoint**: Layout is provably shared; backends only apply it
@@ -141,11 +141,11 @@ Cargo workspace at repository root. Backend crates `rn-windows/` and `rn-linux/`
 
 **Independent Test**: Introduce a throwaway `ComponentKind` variant and confirm both new backends fail to build; introduce a Windows-only regression and confirm only the Windows job fails.
 
-- [ ] T045 [US4] Create `/Users/I779886/Developer/rust-native-ui/.github/workflows/ci.yml` with a three-platform matrix (`macos-latest`, `windows-latest`, `ubuntu-latest`), each running `cargo build --workspace --all-targets` and `cargo test --workspace` with its own backend feature
-- [ ] T046 [US4] Add GTK4 system dependency installation and `xvfb-run` wrapping to the Linux job in `/Users/I779886/Developer/rust-native-ui/.github/workflows/ci.yml` so windowed tests run rather than skip (research R5)
-- [ ] T047 [US4] Add the completeness guard job to `/Users/I779886/Developer/rust-native-ui/.github/workflows/ci.yml` — a step that appends a throwaway variant to `ComponentKind`, asserts both backends fail to build, then reverts. This is the only way to prove FR-003 stays true as the enum grows
-- [ ] T048 [P] [US4] Add `cargo clippy --workspace --all-targets -- -D warnings` to all three matrix legs in `/Users/I779886/Developer/rust-native-ui/.github/workflows/ci.yml`
-- [ ] T049 [P] [US4] Add a Wayland verification job on a nightly schedule to `/Users/I779886/Developer/rust-native-ui/.github/workflows/ci.yml` using a Wayland compositor, since the standard runners provide only X11 via Xvfb (SC-008)
+- [X] T045 [US4] Create `/Users/I779886/Developer/rust-native-ui/.github/workflows/ci.yml` with a three-platform matrix (`macos-latest`, `windows-latest`, `ubuntu-latest`), each running `cargo build --workspace --all-targets` and `cargo test --workspace` with its own backend feature
+- [X] T046 [US4] Add GTK4 system dependency installation and `xvfb-run` wrapping to the Linux job in `/Users/I779886/Developer/rust-native-ui/.github/workflows/ci.yml` so windowed tests run rather than skip (research R5)
+- [X] T047 [US4] Add the completeness guard job to `/Users/I779886/Developer/rust-native-ui/.github/workflows/ci.yml` — a step that appends a throwaway variant to `ComponentKind`, asserts both backends fail to build, then reverts. This is the only way to prove FR-003 stays true as the enum grows
+- [X] T048 [P] [US4] Add `cargo clippy --workspace --all-targets -- -D warnings` to all three matrix legs in `/Users/I779886/Developer/rust-native-ui/.github/workflows/ci.yml`
+- [X] T049 [P] [US4] Add a Wayland verification job on a nightly schedule to `/Users/I779886/Developer/rust-native-ui/.github/workflows/ci.yml` using a Wayland compositor, since the standard runners provide only X11 via Xvfb (SC-008)
 
 **Checkpoint**: Every PR produces build and test results for all three platforms with no manual dispatch
 
@@ -174,7 +174,7 @@ Cargo workspace at repository root. Backend crates `rn-windows/` and `rn-linux/`
 - [ ] T055 [P] Measure render budget on Windows: time `apply` plus event dispatch against the constitution's baseline hardware, confirm under 8 ms, record the measurement in `/Users/I779886/Developer/rust-native-ui/specs/003-platform-parity/research.md` (constitution IV)
 - [ ] T056 [P] Measure render budget on Linux on Ryzen 5 5600G-class hardware and record alongside T055 in `/Users/I779886/Developer/rust-native-ui/specs/003-platform-parity/research.md` (constitution IV)
 - [ ] T057 Audit both new backends for `unwrap`, `expect` and `panic` in non-test code in `/Users/I779886/Developer/rust-native-ui/rn-windows/src/` and `/Users/I779886/Developer/rust-native-ui/rn-linux/src/`, replacing each with a diagnostic `Err` path (FR-021, contract C6)
-- [ ] T058 [P] Verify no platform type leaks into the public API — confirm `rn/src/lib.rs` exports no `HWND`, `GtkWidget`, or `gtk4::` type in its public surface (FR-006, constitution III)
+- [X] T058 [P] Verify no platform type leaks into the public API — confirm `rn/src/lib.rs` exports no `HWND`, `GtkWidget`, or `gtk4::` type in its public surface (FR-006, constitution III)
 - [ ] T059 Run the full quickstart.md checklist end to end on Windows and Linux, recording the observed result for each of the twelve boxes in `/Users/I779886/Developer/rust-native-ui/specs/003-platform-parity/quickstart.md`
 - [ ] T060 Confirm `git diff --stat examples/` is empty for `/Users/I779886/Developer/rust-native-ui/examples/` on the feature branch, proving FR-005 and SC-005 — no application source required a platform conditional
 

@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Nightly at 03:17 UTC — runs the Wayland job, which needs a real compositor
+    # and is too slow to gate every pull request.
+    - cron: "17 3 * * *"
 
 env:
   CARGO_TERM_COLOR: always
@@ -52,8 +56,97 @@ jobs:
       - name: cargo build (gallery)
         run: cargo build -p gallery --features ${{ matrix.feature }}
 
+      - name: cargo build (showcase)
+        run: cargo build -p showcase --features ${{ matrix.feature }}
+
+      - name: cargo build (settings-demo)
+        run: cargo build -p settings-demo --features ${{ matrix.feature }}
+
+      - name: cargo build (mail-demo)
+        run: cargo build -p mail-demo --features ${{ matrix.feature }}
+
       - name: cargo test (headless reconciler suite)
         run: cargo test -p rn --test reconciler
 
+      - name: cargo test (Linux, windowed, under Xvfb)
+        if: matrix.os == 'ubuntu-latest'
+        run: xvfb-run -a cargo test --workspace --features rn/linux
+
+      - name: cargo test (all other platforms)
+        if: matrix.os != 'ubuntu-latest'
+        run: cargo test --workspace --features rn/${{ matrix.feature }}
+
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # Proves FR-003: a component kind that a backend does not implement must fail
+  # the build. Without this job the guard is an assumption; with it the guard is
+  # demonstrated on every push.
+  completeness-guard:
+    name: completeness-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Inject throwaway ComponentKind variant
+        run: |
+          perl -0pi -e 's/(pub enum ComponentKind \{)/$1\n    ZzzGuardVariant,/' rn-core/src/lib.rs
+          grep -q 'ZzzGuardVariant' rn-core/src/lib.rs || {
+            echo "::error::guard could not inject a variant — the enum shape changed"
+            exit 1
+          }
+
+      - name: Windows backend must reject the unknown kind
+        run: |
+          if cargo check -p rn-windows --target x86_64-pc-windows-msvc 2>windows-guard.log; then
+            echo "::error::Windows backend compiled with an unimplemented ComponentKind."
+            echo "::error::The ComponentKind match is not exhaustive (FR-003 / contract C4)."
+            echo "::error::Remove the '_ =>' catch-all arm from rn-windows/src/renderer.rs."
+            exit 1
+          fi
+          echo "Windows backend correctly rejected the unknown variant"
+          grep -q 'ZzzGuardVariant' windows-guard.log \
+            && echo "failure names the new variant, as required" \
+            || echo "::warning::build failed but did not mention the variant; check the error is non-exhaustive-match"
+
+      - name: Linux backend must reject the unknown kind
+        run: |
+          if cargo check -p rn-linux --target x86_64-unknown-linux-gnu 2>linux-guard.log; then
+            echo "::error::Linux backend compiled with an unimplemented ComponentKind."
+            echo "::error::The ComponentKind match is not exhaustive (FR-003 / contract C4)."
+            exit 1
+          fi
+          echo "Linux backend correctly rejected the unknown variant"
+
+  # Wayland behaviour cannot be checked on the standard runners, which expose
+  # only X11 through Xvfb. A nightly run against a real compositor covers the
+  # window-decoration and global-menu paths that differ between protocols.
+  wayland:
+    name: wayland-nightly
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install GTK4 and a headless compositor
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev sway dbus-x11
+
+      - name: Run windowed tests under Wayland
+        run: |
+          export XDG_RUNTIME_DIR=/tmp/runtime-ci
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          dbus-run-session -- sway -d 2>sway.log &
+          sleep 3
+          export WAYLAND_DISPLAY=wayland-1
+          export GDK_BACKEND=wayland
+          cargo test --workspace --features rn/linux
+
