@@ -95,6 +95,12 @@ enum NativeHandle {
     ListTileWidget(Retained<NSView>),
     ScaffoldWidget(Retained<NSView>),
     TitleBarWidget(Retained<NSView>),
+    // Batch 2 — button family
+    IconButtonWidget(Retained<NSButton>),
+    DisclosureButtonWidget(Retained<NSButton>),
+    HelpButtonWidget(Retained<NSButton>),
+    PopupButtonWidget(Retained<NSPopUpButton>),
+    BackButtonWidget(Retained<NSButton>),
 }
 
 impl NativeHandle {
@@ -133,10 +139,15 @@ impl NativeHandle {
             NativeHandle::RichTextWidget(v) => Some(v),
             NativeHandle::TouchableWidget(v) => Some(v),
             NativeHandle::SafeAreaWidget(v) => Some(v),
-            NativeHandle::ContentAreaWidget(v) => Some(v),
-            NativeHandle::ListTileWidget(v) => Some(v),
-            NativeHandle::ScaffoldWidget(v) => Some(v),
-            NativeHandle::TitleBarWidget(v) => Some(v),
+            NativeHandle::ContentAreaWidget(v) => Some(v),           
+            NativeHandle::ListTileWidget(v) => Some(v),              
+            NativeHandle::ScaffoldWidget(v) => Some(v),              
+            NativeHandle::TitleBarWidget(v) => Some(v),              
+            NativeHandle::IconButtonWidget(v) => Some(v),
+            NativeHandle::DisclosureButtonWidget(v) => Some(v),
+            NativeHandle::HelpButtonWidget(v) => Some(v),
+            NativeHandle::PopupButtonWidget(v) => Some(v),
+            NativeHandle::BackButtonWidget(v) => Some(v),
         }
     }
 }
@@ -1202,6 +1213,160 @@ fn create_node(
         }
 
         // ------------------------------------------------------------------
+        // IconButton — borderless SF Symbol button
+        // ------------------------------------------------------------------
+        ComponentKind::IconButton => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(28.0, 28.0));
+            let btn: Retained<NSButton> = unsafe { NSButton::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                btn.setBezelStyle(NSBezelStyle::Circular);
+                btn.setBordered(false);
+                btn.setTitle(&NSString::from_str(""));
+            }
+            if let Some(PropValue::String(sym)) = props.get(&PropKey::IconName) {
+                let ns_name = NSString::from_str(sym);
+                if let Some(img) =
+                    unsafe { NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None) }
+                {
+                    unsafe { btn.setImage(Some(&img)) }
+                }
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnPress) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    btn.setTarget(Some(obj));
+                    btn.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &btn);
+            state.nodes.insert(node_id, NativeHandle::IconButtonWidget(btn));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // DisclosureButton — triangle disclosure toggle
+        // ------------------------------------------------------------------
+        ComponentKind::DisclosureButton => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(160.0, 20.0));
+            let btn: Retained<NSButton> = unsafe { NSButton::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                btn.setBezelStyle(NSBezelStyle::Disclosure);
+                btn.setButtonType(objc2_app_kit::NSButtonType::PushOnPushOff);
+            }
+            if let Some(PropValue::String(label)) = props.get(&PropKey::Text) {
+                unsafe { btn.setTitle(&NSString::from_str(label)) }
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnPress) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    btn.setTarget(Some(obj));
+                    btn.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &btn);
+            state.nodes.insert(node_id, NativeHandle::DisclosureButtonWidget(btn));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // HelpButton — round "?" button
+        // ------------------------------------------------------------------
+        ComponentKind::HelpButton => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(20.0, 20.0));
+            let btn: Retained<NSButton> = unsafe { NSButton::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                btn.setBezelStyle(NSBezelStyle::HelpButton);
+                btn.setTitle(&NSString::from_str(""));
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnPress) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    btn.setTarget(Some(obj));
+                    btn.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &btn);
+            state.nodes.insert(node_id, NativeHandle::HelpButtonWidget(btn));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // PopupButton — bezeled pull-down for forms
+        // ------------------------------------------------------------------
+        ComponentKind::PopupButton => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(160.0, 26.0));
+            let popup: Retained<NSPopUpButton> = unsafe {
+                let p = NSPopUpButton::initWithFrame_pullsDown(mtm.alloc(), frame, false);
+                p.setBezelStyle(NSBezelStyle::Toolbar);
+                p
+            };
+            if let Some(PropValue::StringList(opts)) = props.get(&PropKey::Options) {
+                unsafe {
+                    popup.removeAllItems();
+                    for o in opts {
+                        popup.addItemWithTitle(&NSString::from_str(o));
+                    }
+                    let sel = f32_prop(&props, PropKey::SelectedIndex, 0.0) as isize;
+                    popup.selectItemAtIndex(sel);
+                }
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnChange) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    popup.setTarget(Some(obj));
+                    popup.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &popup);
+            state.nodes.insert(node_id, NativeHandle::PopupButtonWidget(popup));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // BackButton — chevron-left navigation button
+        // ------------------------------------------------------------------
+        ComponentKind::BackButton => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(32.0, 28.0));
+            let btn: Retained<NSButton> = unsafe { NSButton::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                btn.setBezelStyle(NSBezelStyle::Toolbar);
+                btn.setBordered(false);
+                btn.setTitle(&NSString::from_str(""));
+            }
+            let ns_name = NSString::from_str("chevron.left");
+            if let Some(img) =
+                unsafe { NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None) }
+            {
+                unsafe { btn.setImage(Some(&img)) }
+            }
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnPress) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    btn.setTarget(Some(obj));
+                    btn.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &btn);
+            state.nodes.insert(node_id, NativeHandle::BackButtonWidget(btn));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
         // ActivityIndicator — NSProgressIndicator indeterminate (FR-010)
         // ------------------------------------------------------------------
         ComponentKind::ActivityIndicator => {
@@ -1825,6 +1990,11 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
         Some(NativeHandle::ListTileWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::ScaffoldWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::TitleBarWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::IconButtonWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::DisclosureButtonWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::HelpButtonWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::PopupButtonWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::BackButtonWidget(parent)) => unsafe { parent.addSubview(view) },
         _ => {}
     }
 }
@@ -1947,8 +2117,13 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::SearchBar => (None, Some(28.0)),
         ComponentKind::StatusBar => (None, Some(22.0)),
         ComponentKind::SidebarItem => (None, Some(28.0)),
-        ComponentKind::ListTile => (None, Some(44.0)),
-        ComponentKind::TitleBar => (None, Some(28.0)),
+        ComponentKind::ListTile => (None, Some(44.0)),               
+        ComponentKind::TitleBar => (None, Some(28.0)),               
+        ComponentKind::IconButton => (Some(28.0), Some(28.0)),
+        ComponentKind::DisclosureButton => (None, Some(20.0)),
+        ComponentKind::HelpButton => (Some(20.0), Some(20.0)),
+        ComponentKind::PopupButton => (Some(160.0), Some(26.0)),
+        ComponentKind::BackButton => (Some(32.0), Some(28.0)),
         ComponentKind::RichText => (None, Some(80.0)),
         ComponentKind::FlatList => (None, Some(300.0)),
         ComponentKind::ScrollView => (None, Some(200.0)),

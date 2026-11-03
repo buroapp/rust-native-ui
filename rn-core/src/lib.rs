@@ -67,11 +67,17 @@ pub enum ComponentKind {
     Toolbar,
     Switch,
     StatusBar,
-    // Batch 1 — macOS layout primitives (macos_ui parity)
-    ContentArea,
-    ListTile,
-    Scaffold,
-    TitleBar,
+    // Batch 1 — macOS layout primitives (macos_ui parity)     
+    ContentArea,                                               
+    ListTile,                                                  
+    Scaffold,                                                  
+    TitleBar,                                                  
+    // Batch 2 — button family (macos_ui parity)
+    IconButton,
+    DisclosureButton,
+    HelpButton,
+    PopupButton,
+    BackButton,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

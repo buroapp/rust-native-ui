@@ -578,6 +578,48 @@ pub fn title_bar(title: impl Into<String>) -> ComponentBuilder {
         .prop(PropKey::Text, PropValue::String(title.into()))
 }
 
+/// Start building an `IconButton` — borderless SF Symbol button (macos_ui `MacosIconButton`).
+pub fn icon_button(symbol: impl Into<String>, on_press: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::IconButton)
+        .prop(PropKey::IconName, PropValue::String(symbol.into()))
+        .prop(PropKey::OnPress, PropValue::HandlerRef(on_press))
+}
+
+/// Start building a `DisclosureButton` — triangle disclosure toggle (macos_ui `MacosDisclosureButton`).
+pub fn disclosure_button(label: impl Into<String>, on_press: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::DisclosureButton)
+        .prop(PropKey::Text, PropValue::String(label.into()))
+        .prop(PropKey::OnPress, PropValue::HandlerRef(on_press))
+}
+
+/// Start building a `HelpButton` — the round "?" button (macos_ui `MacosHelpButton`).
+pub fn help_button(label: impl Into<String>, on_press: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::HelpButton)
+        .prop(PropKey::Text, PropValue::String(label.into()))
+        .prop(PropKey::OnPress, PropValue::HandlerRef(on_press))
+}
+
+/// Start building a `PopupButton` — bezeled pull-down shown in macOS forms
+/// (macos_ui `MacosPopupButton`).
+pub fn popup_button(
+    options: Vec<String>,
+    selected: usize,
+    on_change: HandlerId,
+) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::PopupButton)
+        .prop(PropKey::Options, PropValue::StringList(options))
+        .prop(PropKey::SelectedIndex, PropValue::F32(selected as f32))
+        .prop(PropKey::OnChange, PropValue::HandlerRef(on_change))
+}
+
+/// Start building a `BackButton` — chevron-left button used in navigation bars
+/// (macos_ui `MacosBackButton`).
+pub fn back_button(on_press: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::BackButton)
+        .prop(PropKey::IconName, PropValue::String("chevron.left".into()))
+        .prop(PropKey::OnPress, PropValue::HandlerRef(on_press))
+}
+
 /// Start building a `Toolbar` component.
 pub fn toolbar(actions: Vec<ToolbarAction>) -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::Toolbar)
