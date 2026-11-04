@@ -77,6 +77,8 @@ pub enum ComponentKind {
     ContentArea,                                               
     ListTile,                                                  
     Scaffold,                                                  
+    TabView,
+    TabItem,
     TitleBar,                                                  
     // Batch 2 — button family (macos_ui parity)               
     IconButton,                                                
@@ -146,6 +148,8 @@ impl ComponentKind {
         ComponentKind::ContentArea,
         ComponentKind::ListTile,
         ComponentKind::Scaffold,
+        ComponentKind::TabView,
+        ComponentKind::TabItem,
         ComponentKind::TitleBar,
         ComponentKind::IconButton,
         ComponentKind::DisclosureButton,
@@ -201,6 +205,8 @@ pub enum PropKey {
     OnPress,
     OnChange,
     OnClose,
+    /// Render with the modern full-size-content window look.
+    ModernLook,
     // Numeric range & value
     Value,
     Min,

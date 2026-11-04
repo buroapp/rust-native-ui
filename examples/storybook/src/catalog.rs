@@ -435,6 +435,42 @@ fn split_view_demos(_ids: &mut Ids) -> Vec<Demo> {
     )]
 }
 
+fn tab_view_demos(_ids: &mut Ids) -> Vec<Demo> {
+    vec![demo(
+        "Three tabs",
+        rn::tab_view()
+            .child(
+                rn::tab_item("General")
+                    .child(rn::label("General settings live here"))
+                    .build(),
+            )
+            .child(
+                rn::tab_item("Advanced")
+                    .child(rn::label("Advanced settings live here"))
+                    .build(),
+            )
+            .child(
+                rn::tab_item("About")
+                    .child(rn::label("Rust Native 0.1.0"))
+                    .build(),
+            )
+            .build(),
+    )]
+}
+
+fn tab_item_demos(_ids: &mut Ids) -> Vec<Demo> {
+    vec![demo(
+        "One page in a TabView",
+        rn::tab_view()
+            .child(
+                rn::tab_item("Page")
+                    .child(rn::label("A tab item is a page; its children are the content."))
+                    .build(),
+            )
+            .build(),
+    )]
+}
+
 fn safe_area_view_demos(_ids: &mut Ids) -> Vec<Demo> {
     vec![demo(
         "Inset container",
@@ -475,7 +511,22 @@ fn toolbar_demos(ids: &mut Ids) -> Vec<Demo> {
             .label("Delete")
             .icon("trash"),
     ];
-    vec![demo("Two actions", rn::toolbar(actions).build())]
+    vec![
+        demo("Two actions", rn::toolbar(actions).build()),
+        // The "sliver toolbar" pattern: the same toolbar as a child of a scroll
+        // view, so it scrolls away with the content. No separate component needed.
+        demo(
+            "Sliver — scrolls with content",
+            rn::scroll_view()
+                .child(
+                    rn::vstack()
+                        .child(rn::toolbar(vec![rn::ToolbarAction::new("a", ids.take()).icon("gear")]).build())
+                        .children((1..=8).map(|i| rn::label(format!("Content line {i}"))))
+                        .build(),
+                )
+                .build(),
+        ),
+    ]
 }
 
 fn toolbar_icon_button_demos(ids: &mut Ids) -> Vec<Demo> {
@@ -648,6 +699,8 @@ pub const CATALOG: &[Entry] = &[
     Entry { category: "Layout", name: "ContentArea", summary: "Main window pane", build: content_area_demos },
     Entry { category: "Layout", name: "Scaffold", summary: "Window structure", build: scaffold_demos },
     Entry { category: "Layout", name: "SplitView", summary: "Resizable panes", build: split_view_demos },
+    Entry { category: "Layout", name: "TabView", summary: "Native tabbed panes", build: tab_view_demos },
+    Entry { category: "Layout", name: "TabItem", summary: "One page of a TabView", build: tab_item_demos },
     Entry { category: "Layout", name: "SafeAreaView", summary: "Inset container", build: safe_area_view_demos },
     Entry { category: "Layout", name: "SearchBar", summary: "Search field", build: search_bar_demos },
 

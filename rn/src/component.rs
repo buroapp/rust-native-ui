@@ -64,6 +64,12 @@ impl ComponentBuilder {
             .prop(PropKey::Height, PropValue::F32(height))
     }
 
+    /// Use the modern window look: content extends under a transparent titlebar
+    /// (`FullSizeContentView`), which is what current macOS windows do.
+    pub fn modern(self, modern: bool) -> Self {
+        self.prop(PropKey::ModernLook, PropValue::Bool(modern))
+    }
+
     pub fn enabled(self, enabled: bool) -> Self {
         self.prop(PropKey::Enabled, PropValue::Bool(enabled))
     }

@@ -703,6 +703,20 @@ pub fn sheet() -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::Sheet)
 }
 
+/// Start building a `TabView` — native tabbed panes (`NSTabView`).
+///
+/// Children are [`tab_item`]s; the tab view shows one page at a time and AppKit
+/// sizes each page to the content area, so pages are not part of flex layout.
+pub fn tab_view() -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::TabView).flex(1.0)
+}
+
+/// One page of a [`tab_view`]. Children become that page's content.
+pub fn tab_item(label: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::TabItem)
+        .prop(PropKey::Text, PropValue::String(label.into()))
+}
+
 /// Start building a `Toolbar` component.
 pub fn toolbar(actions: Vec<ToolbarAction>) -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::Toolbar)

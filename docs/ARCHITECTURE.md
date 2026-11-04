@@ -83,6 +83,11 @@ Two further rules follow from the coordinate systems:
 `ContentArea` is a scroll container for the same reason: it is a window's main
 surface, so content taller than the pane has to stay reachable.
 
+One deliberate exception: **`TabView` pages are not flex children.** `NSTabView`
+sizes the page it shows, so handing pages to taffy would compute a second,
+competing rect for each one. Build spec emits no children for a `TabView`, pages
+resize with the tab view, and `apply_rects` never touches them.
+
 **Selection is tree state, not scroll position.** A row selected programmatically
 may sit far outside the visible part of a long list, so the renderer scrolls the
 selection into view — only when the selection actually changes, so an unrelated
@@ -123,6 +128,15 @@ This has driven three rewrites:
   [`examples/storybook`](../examples/storybook).
 - ~80 `PropKey` variants, 15 `PropValue` variants, 13 `EventPayload` variants.
 - 72 public builders in `rn`.
+
+Built-in layouts mirror the `macos_ui` set: `window` (with the modern
+full-size-content look via `.modern(true)`), `scaffold`, `sidebar` +
+`sidebar_item`, `toolbar`, `list_tile`, `tab_view` + `tab_item`, `content_area`,
+`split_view` and `safe_area_view`. The sliver toolbar is not a separate
+component: a `toolbar` placed as a child of a scroll view scrolls away with the
+content, which is what the pattern means. A modern window renders content from
+the window's top edge, so an app must inset its own content past the traffic
+lights; the framework does not yet expose a titlebar inset.
 
 The storybook is not a demo — it is the regression surface. `catalog.rs` contains a
 test that fails when `rn-core` gains a component kind with no catalog entry, so the

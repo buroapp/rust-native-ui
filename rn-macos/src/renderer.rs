@@ -30,7 +30,8 @@ use objc2_app_kit::{
     NSColor, NSColorWell, NSControlTextEditingDelegate, NSControlStateValueOff, NSControlStateValueOn,
     NSDatePicker, NSDatePickerStyle, NSImageView, NSLineBreakMode, NSPopUpButton, NSProgressIndicator,
     NSScrollView, NSSlider, NSTextField, NSTextFieldDelegate,
-    NSAlert, NSTextView, NSStepper, NSView, NSWindow, NSWindowDelegate, NSWindowStyleMask,
+    NSAutoresizingMaskOptions, NSAlert, NSTabView, NSTabViewItem, NSTextView, NSStepper, NSView, NSWindow, NSWindowDelegate,
+    NSWindowStyleMask, NSWindowTitleVisibility,
     NSBox, NSBoxType, NSDatePickerElementFlags, NSDatePickerMode, NSImage,
     NSLevelIndicator, NSLevelIndicatorStyle, NSSearchField,
     NSSegmentedControl, NSSwitch,
@@ -115,6 +116,7 @@ enum NativeHandle {
     ToolbarPopupWidget(Retained<NSPopUpButton>),
     AlertDialogWidget(Retained<NSView>),
     SheetWidget(Retained<NSView>, Retained<NSWindow>),
+    TabViewWidget(Retained<NSTabView>),
 }
 
 impl NativeHandle {
@@ -173,6 +175,7 @@ impl NativeHandle {
             NativeHandle::ToolbarPopupWidget(v) => Some(v),
             NativeHandle::AlertDialogWidget(v) => Some(v),
             NativeHandle::SheetWidget(v, _) => Some(v),
+            NativeHandle::TabViewWidget(v) => Some(v),
         }
     }
 }
@@ -510,10 +513,14 @@ fn create_node(
         ComponentKind::Window => {
             let (w, h) = size_from_props(&props, 400.0, 300.0);
             let rect = NSRect::new(NSPoint::new(200.0, 200.0), NSSize::new(w as f64, h as f64));
-            let style = NSWindowStyleMask::Titled
+            let modern = bool_prop(&props, PropKey::ModernLook, false);
+            let mut style = NSWindowStyleMask::Titled
                 | NSWindowStyleMask::Closable
                 | NSWindowStyleMask::Resizable
                 | NSWindowStyleMask::Miniaturizable;
+            if modern {
+                style |= NSWindowStyleMask::FullSizeContentView;
+            }
             let window: Retained<NSWindow> = unsafe {
                 NSWindow::initWithContentRect_styleMask_backing_defer(
                     mtm.alloc(),
@@ -526,6 +533,11 @@ fn create_node(
             if let Some(PropValue::String(title)) = props.get(&PropKey::Title) {
                 let ns_title = NSString::from_str(title);
                 window.setTitle(&ns_title);
+            }
+            if modern {
+                // The modern macOS look: content runs under a transparent titlebar.
+                window.setTitlebarAppearsTransparent(true);
+                window.setTitleVisibility(NSWindowTitleVisibility::NSWindowTitleHidden);
             }
             if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnClose) {
                 let delegate = WindowDelegate::new(mtm, *h, node_id);
@@ -1688,6 +1700,70 @@ fn create_node(
         }
 
         // ------------------------------------------------------------------
+        // TabView — native NSTabView
+        // ------------------------------------------------------------------
+        ComponentKind::TabView => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 300.0));
+            let tab_view: Retained<NSTabView> =
+                unsafe { NSTabView::initWithFrame(mtm.alloc(), frame) };
+            attach_to_parent(state, parent_id, &tab_view);
+            state.nodes.insert(node_id, NativeHandle::TabViewWidget(tab_view));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
+        // TabItem — one NSTabViewItem whose page hosts the children
+        // ------------------------------------------------------------------
+        ComponentKind::TabItem => {
+            let label = match props.get(&PropKey::Text) {
+                Some(PropValue::String(s)) => s.clone(),
+                _ => String::new(),
+            };
+            let page: Retained<NSView> = unsafe {
+                NSView::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 280.0)),
+                )
+            };
+            // NSTabView sizes its pages itself; letting them resize with the tab
+            // view is the native contract. Pages are deliberately not part of flex
+            // layout, so nothing competes with that.
+            unsafe {
+                page.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable
+                    | NSAutoresizingMaskOptions::NSViewHeightSizable);
+            }
+
+            let mut added = false;
+            if let Some(NativeHandle::TabViewWidget(tab_view)) =
+                parent_id.and_then(|pid| state.nodes.get(&pid))
+            {
+                let item: Retained<NSTabViewItem> = unsafe {
+                    let it = NSTabViewItem::new();
+                    it.setLabel(&NSString::from_str(&label));
+                    it.setView(Some(&page));
+                    tab_view.addTabViewItem(&it);
+                    it
+                };
+                // The tab view owns its items; keep ours alive for the node's life.
+                stash_delegate(node_id, DelegateHandle::TabItem(item));
+                added = true;
+            }
+            if !added {
+                // A TabItem outside a TabView has nowhere to go; render its page
+                // inline rather than dropping the content silently.
+                attach_to_parent(state, parent_id, &page);
+            }
+
+            state.nodes.insert(node_id, NativeHandle::View(
+                page,
+                ContainerInfo { axis: Axis::Vertical, padding: 0.0, gap: 0.0 },
+            ));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
         // ActivityIndicator — NSProgressIndicator indeterminate (FR-010)
         // ------------------------------------------------------------------
         ComponentKind::ActivityIndicator => {
@@ -2500,11 +2576,18 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         }
         _ => f32_opt(&shadow.props, PropKey::MinWidth),
     };
-    let children = shadow
-        .children
-        .iter()
-        .filter_map(|c| build_spec(state, *c))
-        .collect();
+    // A TabView's pages are sized by NSTabView, not by flex layout. Feeding them
+    // to taffy would compute a second, competing rect for each page.
+    let forces_no_children = matches!(shadow.kind, ComponentKind::TabView);
+    let children = if forces_no_children {
+        Vec::new()
+    } else {
+        shadow
+            .children
+            .iter()
+            .filter_map(|c| build_spec(state, *c))
+            .collect()
+    };
 
     // flex_grow comes directly from the FlexGrow prop — no per-kind guessing.
     // Callers set .flex(1.0) when they want fill-behavior.
@@ -3330,6 +3413,7 @@ enum DelegateHandle {
     Text(Retained<TextDelegate>),
     Tick(Retained<TickTarget>),
     Alert(Retained<AlertTarget>),
+    TabItem(Retained<NSTabViewItem>),
 }
 
 thread_local! {
