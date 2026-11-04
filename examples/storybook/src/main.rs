@@ -165,12 +165,10 @@ fn main() -> Result<(), rn::RnError> {
                 blocks.push(rn::separator());
                 blocks.push(rn::label(format!("Event: {}", s.status)));
 
+                // ContentArea scrolls on its own; nesting a ScrollView here would
+                // create two nested scrollers and halve the visible area.
                 let content = rn::content_area()
-                    .child(
-                        rn::scroll_view()
-                            .child(rn::vstack().padding(18.0).gap(10.0).children(blocks).build())
-                            .build(),
-                    )
+                    .child(rn::vstack().padding(18.0).gap(10.0).children(blocks).build())
                     .build();
 
                 ComponentTree::new(

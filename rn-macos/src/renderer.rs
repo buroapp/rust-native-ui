@@ -93,7 +93,6 @@ enum NativeHandle {
     TouchableWidget(Retained<NSView>),
     SafeAreaWidget(Retained<NSView>),
     // Batch 1 — macOS layout primitives
-    ContentAreaWidget(Retained<NSView>),
     ListTileWidget(Retained<NSView>),
     ScaffoldWidget(Retained<NSView>),
     TitleBarWidget(Retained<NSView>),
@@ -154,7 +153,6 @@ impl NativeHandle {
             NativeHandle::RichTextWidget(v) => Some(v),
             NativeHandle::TouchableWidget(v) => Some(v),
             NativeHandle::SafeAreaWidget(v) => Some(v),
-            NativeHandle::ContentAreaWidget(v) => Some(v),           
             NativeHandle::ListTileWidget(v) => Some(v),              
             NativeHandle::ScaffoldWidget(v) => Some(v),              
             NativeHandle::TitleBarWidget(v) => Some(v),              
@@ -283,6 +281,9 @@ struct RendererState {
     windows: Vec<NodeId>,
     pending_events: Vec<Event>,
     _tick_timer: Option<Retained<NSTimer>>,
+    /// The selected row we last scrolled into view. Interior mutability so the
+    /// layout pass (which takes `&self`) can record it.
+    last_ensured_selection: std::cell::Cell<Option<u64>>,
 }
 
 impl RendererState {
@@ -294,6 +295,7 @@ impl RendererState {
             windows: Vec::new(),
             pending_events: Vec::new(),
             _tick_timer: None,
+            last_ensured_selection: std::cell::Cell::new(None),
         }
     }
 }
@@ -1068,13 +1070,22 @@ fn create_node(
         // ------------------------------------------------------------------
         ComponentKind::ContentArea => {
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(600.0, 400.0));
-            let view: Retained<NSView> = unsafe {
-                let v = NSView::initWithFrame(mtm.alloc(), frame);
-                v.setWantsLayer(true);
-                v
-            };
-            attach_to_parent(state, parent_id, &view);
-            state.nodes.insert(node_id, NativeHandle::ContentAreaWidget(view));
+            let sv: Retained<NSScrollView> = unsafe { NSScrollView::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                sv.setHasVerticalScroller(true);
+                sv.setHasHorizontalScroller(false);
+                sv.setAutohidesScrollers(true);
+                // A content area is a window's main surface, so it paints the
+                // content background instead of being transparent. Unlike a bare
+                // ScrollView, content taller than the pane must be reachable —
+                // otherwise a page simply ends where the viewport does.
+                sv.setDrawsBackground(true);
+                sv.setBackgroundColor(&NSColor::windowBackgroundColor());
+                let doc = new_document_view(mtm, frame.size);
+                sv.setDocumentView(Some(&doc));
+            }
+            attach_to_parent(state, parent_id, &sv);
+            state.nodes.insert(node_id, NativeHandle::ScrollViewWidget(sv));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
@@ -2317,7 +2328,6 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
         },
         Some(NativeHandle::SafeAreaWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::TouchableWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::ContentAreaWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::ListTileWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::ScaffoldWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::TitleBarWidget(parent)) => unsafe { parent.addSubview(view) },
@@ -2587,6 +2597,17 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
             .rects
             .get(&rn_layout::LayoutNodeId(node_id.0))
             .map_or(0.0, |r| r.width);
+        let viewport = result
+            .rects
+            .get(&rn_layout::LayoutNodeId(node_id.0))
+            .map_or(0.0, |r| r.height);
+        log::debug!(
+            "scroll container {:?}: document {:.0}pt, viewport {:.0}pt{}",
+            node_id,
+            h,
+            viewport,
+            if *h > viewport { " (scrollable)" } else { " (fits)" }
+        );
         if let Some(doc) = unsafe { sv.documentView() } {
             unsafe {
                 doc.setFrame(NSRect::new(
@@ -2662,6 +2683,81 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
             rect.x, rect.y, shadow_parent_id
         );
         unsafe { view.setFrame(ns) };
+    }
+
+    ensure_selection_visible(state, result);
+}
+
+/// Scroll a container so its selected row is on screen.
+///
+/// Selection is usually set from the application, not by scrolling, so without
+/// this a deep-linked or programmatically selected row can sit far outside the
+/// visible part of a long list and the user sees no highlight at all. Only acts
+/// when the selection actually changes, otherwise a relayout caused by an
+/// unrelated event would yank the user's scroll position back.
+fn ensure_selection_visible(state: &RendererState, result: &rn_layout::LayoutResult) {
+    let mut selected: Option<NodeId> = None;
+    for (id, sn) in &state.shadow {
+        if !matches!(
+            sn.kind,
+            ComponentKind::SidebarItem | ComponentKind::ListTile
+        ) {
+            continue;
+        }
+        if matches!(sn.props.get(&PropKey::Selected), Some(PropValue::Bool(true))) {
+            selected = Some(*id);
+            break;
+        }
+    }
+
+    let Some(sel) = selected else {
+        return;
+    };
+    if state.last_ensured_selection.get() == Some(sel.0) {
+        return;
+    }
+
+    // Walk up to the nearest scrolling ancestor.
+    let mut cursor = state.shadow.get(&sel).and_then(|s| s.parent);
+    while let Some(pid) = cursor {
+        let is_scroll = matches!(
+            state.nodes.get(&pid),
+            Some(NativeHandle::ScrollViewWidget(_)) | Some(NativeHandle::FlatListWidget(..))
+        );
+        if is_scroll {
+            let Some(handle) = state.nodes.get(&pid) else {
+                return;
+            };
+            let sv = match handle {
+                NativeHandle::ScrollViewWidget(sv) => sv,
+                NativeHandle::FlatListWidget(sv, _) => sv,
+                _ => return,
+            };
+            let (Some(sel_rect), Some(port_rect)) = (
+                result.rects.get(&rn_layout::LayoutNodeId(sel.0)),
+                result.rects.get(&rn_layout::LayoutNodeId(pid.0)),
+            ) else {
+                return;
+            };
+
+            // Distance of the row from the top of the scrolled content.
+            let offset_in_doc = sel_rect.y - port_rect.y;
+            let doc_height = unsafe { sv.documentView() }
+                .map_or(0.0, |d| d.frame().size.height);
+            let max_scroll = (doc_height as f32 - port_rect.height).max(0.0);
+            // Centre the row when possible; clamp so we never overscroll.
+            let target = (offset_in_doc - (port_rect.height - sel_rect.height) / 2.0)
+                .clamp(0.0, max_scroll);
+
+            unsafe {
+                let clip = sv.contentView();
+                let _: () = msg_send![&*clip, scrollToPoint: NSPoint::new(0.0, target as f64)];
+                sv.reflectScrolledClipView(&clip);
+            }
+            state.last_ensured_selection.set(Some(sel.0));
+            return;
+        }
+        cursor = state.shadow.get(&pid).and_then(|s| s.parent);
     }
 }
 
