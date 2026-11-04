@@ -118,6 +118,8 @@ enum NativeHandle {
     AlertDialogWidget(Retained<NSView>),
     SheetWidget(Retained<NSView>, Retained<NSWindow>),
     TabViewWidget(Retained<NSTabView>),
+    /// Row container, its selection pill, and its label.
+    SidebarItemWidget(Retained<NSView>, Retained<NSBox>, Retained<NSTextField>),
 }
 
 impl NativeHandle {
@@ -177,6 +179,7 @@ impl NativeHandle {
             NativeHandle::AlertDialogWidget(v) => Some(v),
             NativeHandle::SheetWidget(v, _) => Some(v),
             NativeHandle::TabViewWidget(v) => Some(v),
+            NativeHandle::SidebarItemWidget(v, _, _) => Some(v),
         }
     }
 }
@@ -1704,13 +1707,14 @@ fn create_node(
                 Some(PropValue::String(s)) => s.clone(),
                 _ => String::new(),
             };
-            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 18.0));
+            // Aligned with the icon column, the way Finder aligns its headings.
+            let frame = NSRect::new(NSPoint::new(21.0, 0.0), NSSize::new(170.0, 18.0));
             let tf: Retained<NSTextField> = unsafe {
                 let t = NSTextField::initWithFrame(mtm.alloc(), frame);
                 t.setEditable(false);
                 t.setBordered(false);
                 t.setDrawsBackground(false);
-                t.setStringValue(&NSString::from_str(&title.to_uppercase()));
+                t.setStringValue(&NSString::from_str(&title));
                 t.setFont(Some(&NSFont::boldSystemFontOfSize(NSFont::smallSystemFontSize())));
                 t.setTextColor(Some(&NSColor::secondaryLabelColor()));
                 t.setLineBreakMode(NSLineBreakMode(4));
@@ -2030,90 +2034,162 @@ fn create_node(
             } else {
                 String::new()
             };
+            let icon_name = match props.get(&PropKey::IconName) {
+                Some(PropValue::String(s)) => Some(s.clone()),
+                _ => None,
+            };
             let selected = bool_prop(&props, PropKey::Selected, false);
 
-            // Use NSBox as container — supports fillColor + cornerRadius natively
-            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(210.0, 32.0));
-            let row: Retained<NSBox> = unsafe {
-                let b = NSBox::initWithFrame(mtm.alloc(), frame);
+            // Geometry follows the System Settings sidebar: a 32pt row, a selection
+            // pill inset 12pt from each edge with a 7pt radius, icon at 21pt and the
+            // label at 49pt. The row itself is transparent so the pill can be inset;
+            // a full-bleed fill is what made this look unlike macOS.
+            const ROW_H: f64 = 32.0;
+            const PILL_INSET: f64 = 12.0;
+            const PILL_RADIUS: f64 = 7.0;
+            const ICON_X: f64 = 21.0;
+            const ICON_SIZE: f64 = 20.0;
+            // Without an icon the label takes the icon's column rather than leaving
+            // a hole where a glyph would have been.
+            let label_x: f64 = if icon_name.is_some() { 49.0 } else { ICON_X };
+
+            let row_width = 210.0_f64;
+            let row: Retained<NSView> = unsafe {
+                NSView::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(row_width, ROW_H)),
+                )
+            };
+
+            let pill: Retained<NSBox> = unsafe {
+                let b = NSBox::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(
+                        NSPoint::new(PILL_INSET, 0.0),
+                        NSSize::new(row_width - PILL_INSET * 2.0, ROW_H),
+                    ),
+                );
                 b.setBoxType(NSBoxType::NSBoxCustom);
-                b.setCornerRadius(RadiusToken::Lg.px() as f64);
+                b.setCornerRadius(PILL_RADIUS);
                 b.setBorderWidth(0.0);
-                if selected {
-                    b.setFillColor(&NSColor::controlAccentColor());
+                b.setContentViewMargins(NSSize::new(0.0, 0.0));
+                let fill = if selected {
+                    NSColor::controlAccentColor()
                 } else {
-                    b.setFillColor(&NSColor::clearColor());
-                }
+                    NSColor::clearColor()
+                };
+                b.setFillColor(&fill);
+                b.setAutoresizingMask(
+                    NSAutoresizingMaskOptions::NSViewWidthSizable
+                        | NSAutoresizingMaskOptions::NSViewHeightSizable,
+                );
+                row.addSubview(&b);
                 b
             };
 
-            // Label — inset inside box
-            let tf_frame = NSRect::new(NSPoint::new(10.0, 7.0), NSSize::new(190.0, 18.0));
-            let tf: Retained<NSTextField> = unsafe {
-                let t = NSTextField::initWithFrame(mtm.alloc(), tf_frame);
-                t.setEditable(false);
-                t.setBordered(false);
-                t.setDrawsBackground(false);
-                let ns = NSString::from_str(&label_text);
-                t.setStringValue(&ns);
-                let size: f64 = 13.0;
-                let font = if selected {
-                    NSFont::boldSystemFontOfSize(size)
-                } else {
-                    NSFont::systemFontOfSize(size)
+            if let Some(name) = &icon_name {
+                let ns_name = NSString::from_str(name);
+                // A bad symbol name yields no image, so fall back to one that exists
+                // rather than rendering a hole.
+                let image = unsafe {
+                    NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
+                        .or_else(|| {
+                            NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                                &NSString::from_str("square"),
+                                None,
+                            )
+                        })
                 };
-                t.setFont(Some(&font));
-                if selected {
-                    t.setTextColor(Some(&NSColor::whiteColor()));
-                } else {
-                    t.setTextColor(Some(&NSColor::labelColor()));
-                }
-                t.setLineBreakMode(NSLineBreakMode(4)); // NSLineBreakByTruncatingTail
-                t
-            };
-            unsafe {
-                if let Some(cv) = row.contentView() {
-                    cv.addSubview(&tf);
-                } else {
-                    row.addSubview(&tf);
+                if let Some(image) = image {
+                    unsafe {
+                        let iv = NSImageView::initWithFrame(
+                            mtm.alloc(),
+                            NSRect::new(
+                                NSPoint::new(ICON_X, (ROW_H - ICON_SIZE) / 2.0),
+                                NSSize::new(ICON_SIZE, ICON_SIZE),
+                            ),
+                        );
+                        iv.setImage(Some(&image));
+                        iv.setImageScaling(
+                            objc2_app_kit::NSImageScaling::NSImageScaleProportionallyUpOrDown,
+                        );
+                        let tint = if selected {
+                            NSColor::whiteColor()
+                        } else {
+                            NSColor::labelColor()
+                        };
+                        iv.setContentTintColor(Some(&tint));
+                        iv.setAutoresizingMask(
+                            NSAutoresizingMaskOptions::NSViewMinYMargin
+                                | NSAutoresizingMaskOptions::NSViewMaxYMargin,
+                        );
+                        row.addSubview(&iv);
+                    }
                 }
             }
 
-            // Invisible NSButton overlay for click
+            let label: Retained<NSTextField> = unsafe {
+                let t = NSTextField::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(
+                        NSPoint::new(label_x, (ROW_H - 18.0) / 2.0),
+                        NSSize::new((row_width - label_x - 8.0).max(20.0), 18.0),
+                    ),
+                );
+                t.setEditable(false);
+                t.setBordered(false);
+                t.setDrawsBackground(false);
+                t.setStringValue(&NSString::from_str(&label_text));
+                let font = if selected {
+                    NSFont::boldSystemFontOfSize(NSFont::systemFontSize())
+                } else {
+                    NSFont::systemFontOfSize(NSFont::systemFontSize())
+                };
+                t.setFont(Some(&font));
+                let color = if selected {
+                    NSColor::whiteColor()
+                } else {
+                    NSColor::labelColor()
+                };
+                t.setTextColor(Some(&color));
+                t.setLineBreakMode(NSLineBreakMode(4)); // truncate tail
+                t.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
+                row.addSubview(&t);
+                t
+            };
+
+            // Invisible overlay for the click, with the row text as its accessible
+            // name — the label is a sibling, so VoiceOver would not associate it.
             if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnSelect) {
                 let target = ButtonTarget::new(mtm, *h, node_id);
-                let btn_frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(210.0, 32.0));
                 unsafe {
-                    let btn: Retained<NSButton> = NSButton::initWithFrame(mtm.alloc(), btn_frame);
+                    let btn: Retained<NSButton> = NSButton::initWithFrame(
+                        mtm.alloc(),
+                        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(row_width, ROW_H)),
+                    );
                     btn.setBezelStyle(NSBezelStyle::Automatic);
                     btn.setBordered(false);
                     btn.setTransparent(true);
                     btn.setTitle(&NSString::from_str(""));
-                    // Name the control for assistive technology. The row's text lives
-                    // in a sibling label, which VoiceOver will not associate with the
-                    // button on its own.
                     let ax_label = NSString::from_str(&label_text);
-                    // Called through msg_send: the NSAccessibility protocol itself is
-                    // not re-exported at the crate root in objc2-app-kit 0.2.
                     let _: () = msg_send![&*btn, setAccessibilityLabel: &*ax_label];
                     let obj: &AnyObject = &target;
                     btn.setTarget(Some(obj));
                     btn.setAction(Some(sel!(fire:)));
-                    if let Some(cv) = row.contentView() {
-                        cv.addSubview(&btn);
-                    } else {
-                        row.addSubview(&btn);
-                    }
+                    btn.setAutoresizingMask(
+                        NSAutoresizingMaskOptions::NSViewWidthSizable
+                            | NSAutoresizingMaskOptions::NSViewHeightSizable,
+                    );
+                    row.addSubview(&btn);
                 }
                 stash_delegate(node_id, DelegateHandle::Button(target));
             }
 
-            let row_as_view: Retained<NSView> = unsafe { Retained::cast(row) };
-            attach_to_parent(state, parent_id, &row_as_view);
-            state.nodes.insert(node_id, NativeHandle::View(
-                row_as_view,
-                ContainerInfo { axis: Axis::Horizontal, padding: 8.0, gap: 0.0 }
-            ));
+            attach_to_parent(state, parent_id, &row);
+            state.nodes.insert(
+                node_id,
+                NativeHandle::SidebarItemWidget(row, pill, label),
+            );
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
@@ -2262,10 +2338,6 @@ fn update_node(
     let Some(handle) = state.nodes.get(&node_id) else {
         return Err(RenderError::InvalidNode(node_id));
     };
-    let is_sidebar_row = state
-        .shadow
-        .get(&node_id)
-        .is_some_and(|s| matches!(s.kind, ComponentKind::SidebarItem));
     for (key, value) in &changed {
         match (handle, key) {
             (NativeHandle::Window(w), PropKey::Title) => {
@@ -2315,50 +2387,23 @@ fn update_node(
                 }
             }
             (NativeHandle::SidebarWidget(_), PropKey::Selected) => {} // selection styling handled via SidebarItem
-            // SidebarItem selection: repaint the row in place.
-            //
-            // The row is an NSBox stored as a plain View, so the fill colour and the
-            // label have to be updated here. This used to be a no-op that claimed a
-            // re-render would fix it; nothing re-rendered, so the highlight stayed
-            // on whichever row happened to be selected first.
-            (NativeHandle::View(view, _), PropKey::Selected) if is_sidebar_row => {
+            // SidebarItem selection: repaint the pill and label in place.
+            (NativeHandle::SidebarItemWidget(_, pill, label), PropKey::Selected) => {
                 let selected = matches!(value, PropValue::Bool(true));
-                // The stored view is an NSBox cast to NSView when the row was built.
-                let row: &NSBox = unsafe { &*(view.as_ref() as *const NSView as *const NSBox) };
                 unsafe {
                     let fill = if selected {
                         NSColor::controlAccentColor()
                     } else {
                         NSColor::clearColor()
                     };
-                    row.setFillColor(&fill);
-                }
-                let (text_color, font) = unsafe {
-                    if selected {
-                        (
-                            NSColor::whiteColor(),
-                            NSFont::boldSystemFontOfSize(NSFont::systemFontSize()),
-                        )
+                    pill.setFillColor(&fill);
+                    let (color, font) = if selected {
+                        (NSColor::whiteColor(), NSFont::boldSystemFontOfSize(NSFont::systemFontSize()))
                     } else {
-                        (
-                            NSColor::labelColor(),
-                            NSFont::systemFontOfSize(NSFont::systemFontSize()),
-                        )
-                    }
-                };
-                if let Some(cv) = unsafe { row.contentView() } {
-                    let subviews = unsafe { cv.subviews() };
-                    if subviews.count() > 0 {
-                        let first = unsafe { subviews.objectAtIndex(0) };
-                        // The first subview is the row's label, added before the button.
-                        let label: &NSTextField = unsafe {
-                            &*(first.as_ref() as *const NSView as *const NSTextField)
-                        };
-                        unsafe {
-                            label.setTextColor(Some(&text_color));
-                            label.setFont(Some(&font));
-                        }
-                    }
+                        (NSColor::labelColor(), NSFont::systemFontOfSize(NSFont::systemFontSize()))
+                    };
+                    label.setTextColor(Some(&color));
+                    label.setFont(Some(&font));
                 }
             }
             _ => {}

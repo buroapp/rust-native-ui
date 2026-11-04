@@ -15,6 +15,75 @@
 #[cfg(all(target_os = "macos", feature = "macos"))]
 mod catalog;
 
+#[cfg(all(target_os = "macos", feature = "macos"))]
+/// SF Symbol per component. Kept here rather than in the catalogue so the
+/// catalogue stays about what a component *is*, not how it is pictured.
+fn icon_for(name: &str) -> &'static str {
+    match name {
+        "Label" => "textformat",
+        "Button" => "hand.tap",
+        "TextInput" => "character.cursor.ibeam",
+        "TextArea" => "text.alignleft",
+        "Checkbox" => "checkmark.square",
+        "Separator" => "minus",
+        "Image" => "photo",
+        "Badge" => "tag.fill",
+        "Skeleton" => "rectangle.dashed",
+        "Slider" => "slider.horizontal.3",
+        "ProgressBar" => "chart.bar.fill",
+        "Stepper" => "plus.forwardslash.minus",
+        "ActivityIndicator" => "arrow.triangle.2.circlepath",
+        "CapacityIndicator" => "chart.pie.fill",
+        "RatingIndicator" => "star.fill",
+        "RelevanceIndicator" => "scope",
+        "Dropdown" => "chevron.down.square",
+        "PopupButton" => "rectangle.and.arrow.up.right.and.arrow.down.left",
+        "RadioGroup" => "largecircle.fill.circle",
+        "SegmentedControl" => "rectangle.split.3x1",
+        "Switch" => "switch.2",
+        "ColorWell" => "paintpalette",
+        "DatePicker" => "calendar",
+        "TimePicker" => "clock",
+        "GraphicalTimePicker" => "clock.fill",
+        "Sidebar" => "sidebar.left",
+        "SidebarItem" => "list.bullet",
+        "SidebarSection" => "textformat.size.smaller",
+        "ListTile" => "list.bullet.rectangle",
+        "GroupedSection" => "square.grid.2x2",
+        "FlatList" => "list.dash",
+        "ScrollView" => "scroll",
+        "TouchableOpacity" => "hand.tap.fill",
+        "LayoutContainer" => "square.split.2x1",
+        "Card" => "rectangle",
+        "ContentArea" => "rectangle.inset.filled",
+        "Scaffold" => "macwindow",
+        "SplitView" => "rectangle.split.2x1",
+        "TabView" => "rectangle.topthird.inset.filled",
+        "TabItem" => "rectangle",
+        "SafeAreaView" => "rectangle.dashed",
+        "SearchBar" => "magnifyingglass",
+        "Window" => "macwindow",
+        "TitleBar" => "menubar.rectangle",
+        "Toolbar" => "menubar.rectangle",
+        "ToolbarIconButton" => "square.grid.2x2",
+        "ToolbarSpacer" => "arrow.left.and.right",
+        "ToolbarDivider" => "minus",
+        "ToolbarPopup" => "ellipsis.circle",
+        "StatusBar" => "rectangle.bottomthird.inset.filled",
+        "IconButton" => "circle",
+        "BackButton" => "chevron.left",
+        "DisclosureButton" => "chevron.down.circle",
+        "HelpButton" => "questionmark.circle",
+        "RichText" => "text.alignleft",
+        "Tooltip" => "info.circle",
+        "Modal" => "rectangle.portrait",
+        "Popover" => "bubble.left",
+        "AlertDialog" => "exclamationmark.triangle",
+        "Sheet" => "rectangle.portrait.and.arrow.right",
+        _ => "square",
+    }
+}
+
 #[cfg(not(all(target_os = "macos", feature = "macos")))]
 fn main() {
     eprintln!("storybook requires --features macos on macOS");
@@ -120,6 +189,7 @@ fn main() -> Result<(), rn::RnError> {
                     }
                     nav_items.push(
                         rn::sidebar_item(e.name, nav_ids[i])
+                            .icon(icon_for(e.name))
                             .prop(rn::PropKey::Selected, rn::PropValue::Bool(i == selected))
                             .build(),
                     );

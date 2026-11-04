@@ -70,6 +70,11 @@ impl ComponentBuilder {
         self.prop(PropKey::ModernLook, PropValue::Bool(modern))
     }
 
+    /// Attach an SF Symbol name to this component (row icons, toolbar glyphs).
+    pub fn icon(self, name: impl Into<String>) -> Self {
+        self.prop(PropKey::IconName, PropValue::String(name.into()))
+    }
+
     pub fn enabled(self, enabled: bool) -> Self {
         self.prop(PropKey::Enabled, PropValue::Bool(enabled))
     }
