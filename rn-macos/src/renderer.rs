@@ -969,22 +969,7 @@ fn create_node(
         // ------------------------------------------------------------------
         ComponentKind::ScrollView => {
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(300.0, 200.0));
-            let sv: Retained<NSScrollView> = unsafe { NSScrollView::initWithFrame(mtm.alloc(), frame) };
-            unsafe {
-                sv.setHasVerticalScroller(true);
-                sv.setHasHorizontalScroller(false);
-                sv.setAutohidesScrollers(true);
-                sv.setDrawsBackground(false);
-                // Enable bounds-change notifications so on_scroll can be wired
-                // via NotificationCenter in a future delegate implementation.
-                let clip = sv.contentView();
-                clip.setPostsBoundsChangedNotifications(true);
-                // Children of a scroll view are placed in a document view, not on
-                // the scroll view itself — subviews of NSScrollView are clipped
-                // away because they are not part of the scrolled document.
-                let doc = new_document_view(mtm, frame.size);
-                sv.setDocumentView(Some(&doc));
-            }
+            let sv = new_scroll_container(mtm, frame, false);
             attach_to_parent(state, parent_id, &sv);
             state.nodes.insert(node_id, NativeHandle::ScrollViewWidget(sv));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
@@ -997,14 +982,7 @@ fn create_node(
         // ------------------------------------------------------------------
         ComponentKind::FlatList => {
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(300.0, 300.0));
-            let sv: Retained<NSScrollView> = unsafe { NSScrollView::initWithFrame(mtm.alloc(), frame) };
-            unsafe {
-                sv.setHasVerticalScroller(true);
-                sv.setAutohidesScrollers(true);
-                sv.setDrawsBackground(false);
-                let doc = new_document_view(mtm, frame.size);
-                sv.setDocumentView(Some(&doc));
-            }
+            let sv = new_scroll_container(mtm, frame, false);
             // Instantiate virtualization state (FR-002, FR-004).
             let item_h = f32_prop(&props, PropKey::ItemHeightFixed, 44.0);
             let flat_state = FlatListRendererState::new(
@@ -1073,20 +1051,9 @@ fn create_node(
         // ------------------------------------------------------------------
         ComponentKind::ContentArea => {
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(600.0, 400.0));
-            let sv: Retained<NSScrollView> = unsafe { NSScrollView::initWithFrame(mtm.alloc(), frame) };
-            unsafe {
-                sv.setHasVerticalScroller(true);
-                sv.setHasHorizontalScroller(false);
-                sv.setAutohidesScrollers(true);
-                // A content area is a window's main surface, so it paints the
-                // content background instead of being transparent. Unlike a bare
-                // ScrollView, content taller than the pane must be reachable —
-                // otherwise a page simply ends where the viewport does.
-                sv.setDrawsBackground(true);
-                sv.setBackgroundColor(&NSColor::windowBackgroundColor());
-                let doc = new_document_view(mtm, frame.size);
-                sv.setDocumentView(Some(&doc));
-            }
+            // Paints the window background and scrolls: a content area is a window's
+            // main surface, so content taller than the pane must stay reachable.
+            let sv = new_scroll_container(mtm, frame, true);
             attach_to_parent(state, parent_id, &sv);
             state.nodes.insert(node_id, NativeHandle::ScrollViewWidget(sv));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
@@ -2332,58 +2299,38 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
     let Some(pid) = parent_id else {
         return;
     };
-    match state.nodes.get(&pid) {
-        Some(NativeHandle::Window(w)) => {
-            if let Some(content) = w.contentView() {
-                unsafe { content.addSubview(view) };
+    let Some(handle) = state.nodes.get(&pid) else {
+        return;
+    };
+    // Only three containers host their children somewhere other than themselves.
+    // Everything else is a plain view, so there is no reason to name it.
+    unsafe {
+        match handle {
+            NativeHandle::Window(w) => {
+                if let Some(content) = w.contentView() {
+                    content.addSubview(view);
+                }
+            }
+            // A scroll view's children belong to its document, not to the clip view.
+            NativeHandle::ScrollViewWidget(sv) | NativeHandle::FlatListWidget(sv, _) => {
+                match sv.documentView() {
+                    Some(doc) => doc.addSubview(view),
+                    None => sv.addSubview(view),
+                }
+            }
+            // NSBox hosts children in its content view so they sit inside the box.
+            NativeHandle::GroupedSectionWidget(b) | NativeHandle::CardWidget(b) => {
+                match b.contentView() {
+                    Some(cv) => cv.addSubview(view),
+                    None => b.addSubview(view),
+                }
+            }
+            other => {
+                if let Some(parent) = other.as_view() {
+                    parent.addSubview(view);
+                }
             }
         }
-        Some(NativeHandle::View(parent, _)) => unsafe { parent.addSubview(view) },
-        // NSSplitView requires addArrangedSubview to participate in split layout
-        Some(NativeHandle::SplitViewWidget(parent)) => unsafe { parent.addSubview(view) },
-        // Generic NSView-backed Phase-2 containers — plain addSubview
-        // Children of a scroll view belong to its document view.
-        Some(NativeHandle::ScrollViewWidget(sv)) => {
-            if let Some(doc) = unsafe { sv.documentView() } { unsafe { doc.addSubview(view) } }
-            else { unsafe { sv.addSubview(view) } }
-        }
-        Some(NativeHandle::FlatListWidget(sv, _)) => {
-            if let Some(doc) = unsafe { sv.documentView() } { unsafe { doc.addSubview(view) } }
-            else { unsafe { sv.addSubview(view) } }
-        }
-        Some(NativeHandle::SidebarWidget(parent)) => unsafe { parent.addSubview(view) },
-        // NSBox containers: children go into contentView so they appear inside the box
-        Some(NativeHandle::GroupedSectionWidget(parent)) => unsafe {
-            if let Some(cv) = parent.contentView() { cv.addSubview(view) }
-            else { parent.addSubview(view) }
-        },
-        Some(NativeHandle::CardWidget(parent)) => unsafe {
-            if let Some(cv) = parent.contentView() { cv.addSubview(view) }
-            else { parent.addSubview(view) }
-        },
-        Some(NativeHandle::SafeAreaWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::TouchableWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::ListTileWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::ScaffoldWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::TitleBarWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::IconButtonWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::DisclosureButtonWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::HelpButtonWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::PopupButtonWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::BackButtonWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::CapacityIndicatorWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::RatingIndicatorWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::RelevanceIndicatorWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::TooltipWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::TimePickerWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::GraphicalTimePickerWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::ToolbarIconButtonWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::ToolbarSpacerWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::ToolbarDividerWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::ToolbarPopupWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::AlertDialogWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::SheetWidget(parent, _)) => unsafe { parent.addSubview(view) },
-        _ => {}
     }
 }
 
@@ -2979,6 +2926,31 @@ declare_class!(
         }                                                            
     }                                                                
 );                                                                   
+
+/// A scroll container with a flipped document view already installed.
+///
+/// Every scrolled surface needs the same three things: a vertical scroller, a
+/// document view to hold the content, and a flipped document so it opens at the
+/// top rather than the bottom.
+fn new_scroll_container(
+    mtm: MainThreadMarker,
+    frame: NSRect,
+    draws_background: bool,
+) -> Retained<NSScrollView> {
+    let sv: Retained<NSScrollView> = unsafe { NSScrollView::initWithFrame(mtm.alloc(), frame) };
+    unsafe {
+        sv.setHasVerticalScroller(true);
+        sv.setHasHorizontalScroller(false);
+        sv.setAutohidesScrollers(true);
+        sv.setDrawsBackground(draws_background);
+        if draws_background {
+            sv.setBackgroundColor(&NSColor::windowBackgroundColor());
+        }
+        let doc = new_document_view(mtm, frame.size);
+        sv.setDocumentView(Some(&doc));
+    }
+    sv
+}
 
 /// Create a flipped document view, the host for scrolled content.
 fn new_document_view(mtm: MainThreadMarker, size: NSSize) -> Retained<NSView> {
