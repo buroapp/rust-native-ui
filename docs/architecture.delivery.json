@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "3d09ca54-e289-4b2f-83ca-81dbe2aeeddf",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/I779886/Developer/rust-native-ui/.archify/architecture-rn-20261104-095500/candidate.json",
+  "output": "/Users/I779886/Developer/rust-native-ui/docs/architecture.html",
+  "specification": {
+    "sha256": "f34d898a3bb701b1875e3dbcdf0f4427fb98994eaca700d927537bbf4575fecf",
+    "bytes": 3885
+  },
+  "artifact": {
+    "sha256": "aeb1f551f6b6dde21fabab627cff9cee46c96f8ef8ff9970e9d5bb184ecce2cd",
+    "bytes": 844632
+  }
+}

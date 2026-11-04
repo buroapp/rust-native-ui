@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "/Users/I779886/Developer/rust-native-ui/.archify/architecture-rn-20261104-095500/candidate.json",
+    "sha256": "88b2bd61c01953220d0bc4ed08dfb8b87b9357a5cc68e443c11a6900c953b0ba",
+    "bytes": 2665
+  },
+  "artifact": {
+    "path": "/Users/I779886/Developer/rust-native-ui/docs/architecture.html",
+    "sha256": "848a3b638b1af18dd145d52ab728e9e79e1693cea59aadc14be0497baa42fde2",
+    "bytes": 845828
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/Users/I779886/Developer/rust-native-ui/docs/architecture.finalize.json",
+    "summaryReceipt": "/Users/I779886/Developer/rust-native-ui/docs/architecture.finalize-summary.json",
+    "browserCheckReceipt": "/Users/I779886/Developer/rust-native-ui/docs/architecture.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-04T09:52:35.239Z",
+    "source": "network",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 7007,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  },
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "routesOverSuggestedBends": 2
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [],
+      "detours": [
+        {
+          "relationship": {
+            "id": "macos-to-appkit",
+            "from": "macos",
+            "to": "appkit",
+            "label": "create + place views",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "bends": 3,
+          "stretch": 1.251
+        },
+        {
+          "relationship": {
+            "id": "appkit-to-macos",
+            "from": "appkit",
+            "to": "macos",
+            "label": "press · change · scroll",
+            "collectionIndex": 6,
+            "artifactIndex": 7
+          },
+          "bends": 3,
+          "stretch": 1.25
+        }
+      ],
+      "truncated": false
+    },
+    "hints": [
+      "macos → appkit needs 3 bends: move node macos or appkit so they share a row or column with matching centers, or sit diagonally with a clear corner.",
+      "appkit → macos needs 3 bends: move node appkit or macos so they share a row or column with matching centers, or sit diagonally with a clear corner."
+    ],
+    "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
+  }
+}

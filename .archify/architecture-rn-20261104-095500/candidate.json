@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Rust Native UI \u2014 Architecture",
+    "output": "docs/architecture.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "app",
+      "type": "external",
+      "label": "Application",
+      "sublabel": "storybook \u00b7 demos",
+      "pos": [
+        40,
+        250
+      ],
+      "size": [
+        150,
+        68
+      ]
+    },
+    {
+      "id": "rn",
+      "type": "frontend",
+      "label": "rn",
+      "sublabel": "builders \u00b7 ComponentTree \u00b7 reconciler",
+      "pos": [
+        260,
+        236
+      ],
+      "size": [
+        180,
+        96
+      ]
+    },
+    {
+      "id": "core",
+      "type": "backend",
+      "label": "rn-core",
+      "sublabel": "ComponentKind \u00b7 PropValue \u00b7 events",
+      "pos": [
+        520,
+        96
+      ],
+      "size": [
+        180,
+        68
+      ],
+      "tag": "1128 lines"
+    },
+    {
+      "id": "layout",
+      "type": "backend",
+      "label": "rn-layout",
+      "sublabel": "taffy flexbox \u2192 rects",
+      "pos": [
+        520,
+        396
+      ],
+      "size": [
+        180,
+        68
+      ],
+      "tag": "206 lines"
+    },
+    {
+      "id": "macos",
+      "type": "backend",
+      "label": "rn-macos",
+      "sublabel": "AppKit renderer \u00b7 handle store",
+      "pos": [
+        800,
+        250
+      ],
+      "size": [
+        180,
+        68
+      ],
+      "tag": "3360 lines"
+    },
+    {
+      "id": "windows",
+      "type": "backend",
+      "label": "rn-windows",
+      "sublabel": "not implemented",
+      "pos": [
+        800,
+        366
+      ],
+      "size": [
+        180,
+        44
+      ],
+      "tag": "31 lines"
+    },
+    {
+      "id": "linux",
+      "type": "backend",
+      "label": "rn-linux",
+      "sublabel": "not implemented",
+      "pos": [
+        800,
+        432
+      ],
+      "size": [
+        180,
+        44
+      ],
+      "tag": "173 lines"
+    },
+    {
+      "id": "appkit",
+      "type": "external",
+      "label": "AppKit",
+      "sublabel": "NSView \u00b7 NSScrollView \u00b7 NSAlert",
+      "pos": [
+        1140,
+        250
+      ],
+      "size": [
+        170,
+        68
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Platform-agnostic \u2014 no platform types in the public API",
+      "wraps": [
+        "rn",
+        "core",
+        "layout"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "One backend per platform, selected by cargo feature",
+      "wraps": [
+        "macos",
+        "windows",
+        "linux"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "app-to-rn",
+      "from": "app",
+      "to": "rn",
+      "label": "build tree",
+      "variant": "emphasis"
+    },
+    {
+      "id": "rn-to-core",
+      "from": "rn",
+      "to": "core",
+      "label": "kinds \u00b7 props"
+    },
+    {
+      "id": "rn-to-layout",
+      "from": "rn",
+      "to": "layout",
+      "label": "measure + flex"
+    },
+    {
+      "id": "rn-to-macos",
+      "from": "rn",
+      "to": "macos",
+      "label": "render ops",
+      "variant": "emphasis"
+    },
+    {
+      "id": "layout-to-macos",
+      "from": "layout",
+      "to": "macos",
+      "label": "LayoutResult rects"
+    },
+    {
+      "id": "macos-to-appkit",
+      "from": "macos",
+      "to": "appkit",
+      "label": "create + place views",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "id": "appkit-to-macos",
+      "from": "appkit",
+      "to": "macos",
+      "label": "press \u00b7 change \u00b7 scroll",
+      "route": "straight"
+    },
+    {
+      "id": "macos-to-core",
+      "from": "macos",
+      "to": "core",
+      "label": "Event"
+    },
+    {
+      "id": "core-to-app",
+      "from": "core",
+      "to": "app",
+      "label": "handler(id)",
+      "variant": "security"
+    }
+  ]
+}

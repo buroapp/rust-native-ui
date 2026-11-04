@@ -18,6 +18,9 @@ per-platform renderer.
 - Panic-safe handler dispatch (FR-013), main-thread guard that returns
   `Err(RnError::WrongThread)` instead of panicking (FR-012), and crossbeam-
   channel-based update plumbing for background threads (FR-011).
+- ~57 native controls — from `NSButton` and `NSTextField` to `NSScrollView`,
+  `NSSegmentedControl`, `NSAlert` and real window sheets. Nothing is painted to
+  look like a control; it is the control.
 - Headless reconciler tests run without a display server — perfect for CI.
 - No platform type leaks into consumer crates: `cargo tree -p your-app` shows
   `objc2` / `windows` / `gtk4` only as transitive deps of the backend crate.
@@ -88,18 +91,28 @@ rn-macos/     Real AppKit renderer.
 rn-windows/   Scaffold (compile-only).
 rn-linux/     Scaffold (compile-only).
 examples/
-  hello-world/  Minimal window + label + button.
-  counter/      Button handler mutates state, label updates — demonstrates
-                `rn::update_sender` + `rn::set_tick` + `rn::rerender`.
+  hello-world/    Minimal window + label + button.
+  counter/        Button handler mutates state, label updates — demonstrates
+                  `rn::update_sender` + `rn::set_tick` + `rn::rerender`.
+  gallery/        Layout primitives side by side.
+  showcase/       Broad widget gallery.
+  settings-demo/  macOS System Settings-style sidebar + grouped rows.
+  mail-demo/      Three-pane mail client.
+  storybook/      Every component kind, one page each. Start here.
 tests/reconciler/  Headless reconciler test suite.
 ```
 
 ## Documentation
 
+- **[Architecture](docs/ARCHITECTURE.md)** — crate map, render pipeline, layout
+  invariants, concurrency model, and where to change what.
+  Open [`docs/architecture.html`](docs/architecture.html) for the interactive
+  diagram.
+- [Backend status matrix](docs/backend-status.md) — per-widget support.
+- [Benchmarks](docs/benchmarks.md) — reconciler performance.
 - Public API contract: [`specs/001-core-framework/contracts/public-api.md`](specs/001-core-framework/contracts/public-api.md)
 - Validation guide: [`specs/001-core-framework/quickstart.md`](specs/001-core-framework/quickstart.md)
 - Research decisions: [`specs/001-core-framework/research.md`](specs/001-core-framework/research.md)
-- Full task list: [`specs/001-core-framework/tasks.md`](specs/001-core-framework/tasks.md)
 
 ## License
 
