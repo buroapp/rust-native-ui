@@ -558,11 +558,35 @@ fn create_node(
             let ns_text = NSString::from_str(&text);
             let label: Retained<NSTextField> =
                 unsafe { NSTextField::labelWithString(&ns_text, mtm) };
+            let max_lines = f32_prop(&props, PropKey::MaxLines, 1.0).max(1.0) as usize;
+            let wants_wrap = bool_prop(&props, PropKey::TextWrap, false) || max_lines > 1;
             unsafe {
                 label.setEditable(false);
                 label.setSelectable(false);
                 label.setBordered(false);
                 label.setDrawsBackground(false);
+                // Text alignment was a dead prop: the keys existed but nothing read
+                // them, so centring a label was impossible.
+                label.setAlignment(match f32_prop(&props, PropKey::TextAlign, 0.0) as i32 {
+                    1 => objc2_app_kit::NSTextAlignment::Right,
+                    2 => objc2_app_kit::NSTextAlignment::Center,
+                    _ => objc2_app_kit::NSTextAlignment::Left,
+                });
+                if wants_wrap {
+                    // Word wrapping, capped at the requested line count.
+                    label.setLineBreakMode(NSLineBreakMode(0));
+                    label.setMaximumNumberOfLines(max_lines as isize);
+                    label.setUsesSingleLineMode(false);
+                    // The cell, not the field, decides whether text wraps.
+                    let cell: *mut AnyObject = msg_send![&*label, cell];
+                    if !cell.is_null() {
+                        let _: () = msg_send![cell, setWraps: true];
+                        let _: () = msg_send![cell, setScrollable: false];
+                    }
+                } else {
+                    label.setLineBreakMode(NSLineBreakMode(4)); // truncate tail
+                    label.setMaximumNumberOfLines(1);
+                }
             }
             attach_to_parent(state, parent_id, &label);
             state.nodes.insert(node_id, NativeHandle::Label(label));
@@ -2620,7 +2644,13 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         min_height
     };
     let (fixed_width, fixed_height) = match shadow.kind {
-        ComponentKind::Label => (None, Some(20.0)),
+        ComponentKind::Label => {
+            // A wrapped label needs height for every line it may occupy.
+            let lines = f32_prop(&shadow.props, PropKey::MaxLines, 1.0).max(1.0);
+            let wrap = bool_prop(&shadow.props, PropKey::TextWrap, false);
+            let rows = if wrap { lines } else { 1.0 };
+            (None, Some(20.0 * rows))
+        }
         ComponentKind::Button => (Some(120.0), Some(32.0)),
         ComponentKind::TextInput => (Some(200.0), Some(24.0)),
         ComponentKind::Checkbox => (None, Some(22.0)),
@@ -2737,6 +2767,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
     };
     let justify = f32_prop(&shadow.props, PropKey::Justify, 0.0) as u8;
     let align = f32_prop(&shadow.props, PropKey::Align, 0.0) as u8;
+    let wrap = f32_prop(&shadow.props, PropKey::Wrap, 0.0) as u8;
     Some(LayoutSpec {
         id: LayoutNodeId(node_id.0),
         axis,
@@ -2749,6 +2780,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         flex_grow,
         justify,
         align,
+        wrap,
         children,
     })
 }

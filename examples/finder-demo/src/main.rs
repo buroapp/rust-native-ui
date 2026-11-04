@@ -88,72 +88,67 @@ fn main() -> Result<(), rn::RnError> {
         .build();
 
     // ---- Icon grid ---------------------------------------------------------
-    // GAP: there is no grid or collection view, and no wrapping flexbox. The grid
-    // is hand-built from rows of eight, so column count is fixed rather than
-    // responsive.
+    // A wrapping flow: items reflow to the window width instead of being
+    // hand-grouped into rows of eight.
     fn grid_item(icon: &str, name: &str) -> rn::Component {
-        // GAP (remaining): labels are single-line and left-aligned, so a Finder
-        // item cannot wrap its name over two centred lines.
         rn::vstack()
             .gap(6.0)
             .align_center()
+            .prop(rn::PropKey::Width, rn::PropValue::F32(104.0))
             .child(rn::image(icon).size(64.0, 64.0).build())
-            .child(rn::label(name))
+            // align_center stops children stretching, so the label needs the cell
+            // width explicitly or it collapses to the 60pt minimum.
+            .child(
+                rn::label(name)
+                    .text_center()
+                    .lines(2)
+                    .prop(rn::PropKey::Width, rn::PropValue::F32(104.0)),
+            )
             .build()
     }
 
-    fn grid_row(items: &[(&str, &str)]) -> rn::Component {
-        let children: Vec<rn::Component> = items
-            .iter()
-            .map(|(icon, name)| grid_item(icon, name))
-            .collect();
-        rn::hstack()
-            .gap(20.0)
-            .padding(16.0)
-            .children(children)
-            .build()
-    }
+    let files: &[(&str, &str)] = &[
+        ("doc.text", "architecture.html"),
+        ("doc.richtext", "FHL_Participant_ Guide.pdf"),
+        ("doc.text", "Deployment.md"),
+        ("doc.text", "Release-Process-(Release-Board).md"),
+        ("doc.text", "Engineering-Best-Practices.md"),
+        ("doc.text", "App Center Framework.docx"),
+        ("hammer", "LocalPasskeyManager.xcodeproj"),
+        ("doc.text", "UTKIN_CV_2026_RING.pdf"),
+        ("photo", "Screenshot 2026-11-04 at 12.14.07"),
+        ("opticaldisc", "arduino-ide_2.3.4_amd64.dmg"),
+        ("opticaldisc", "HyprMac.dmg"),
+        ("opticaldisc", "HyprMac-0.17.1.dmg"),
+        ("archivebox", "agram-1.4.7-macos.zip"),
+        ("opticaldisc", "SideloadlySetup.dmg"),
+        ("rectangle.on.rectangle", "2608_ServiceReview_Sep_About.pptx"),
+        ("doc.text", "SKILL (1).md"),
+        ("photo", "Screenshot 2026-03-11 at 11.58.19"),
+        ("photo", "image5.png"),
+        ("photo", "image4.png"),
+        ("photo", "image3.png"),
+        ("photo", "1image.png"),
+        ("rectangle.on.rectangle", "Travel Payments TH Aug 2026.pptx"),
+        ("photo", "222image.png"),
+        ("opticaldisc", "Raycast_2.4.1.0_df4162826_arm64.dmg"),
+    ];
 
-    // GAP: Finder wraps filenames onto two lines and centres them. Our label is
-    // single-line and left-aligned, so long names truncate with an ellipsis.
-    let content = rn::vstack()
-        .flex(1.0)
+    let items: Vec<rn::Component> = files
+        .iter()
+        .map(|(icon, name)| grid_item(icon, name))
+        .collect();
+
+    let content = rn::scroll_view()
         .child(
-            grid_row(&[
-                ("doc.text", "architecture.html"),
-                ("doc.richtext", "FHL_Participant_\u{2026}"),
-                ("doc.text", "Deployment.md"),
-                ("doc.text", "Release-Process-\u{2026}"),
-                ("doc.text", "Engineering-Best\u{2026}"),
-                ("doc.text", "App Center Fram\u{2026}"),
-                ("hammer", "LocalPasskeyMana\u{2026}"),
-                ("doc.text", "UTKIN_CV_2026_R\u{2026}"),
-            ]),
+            rn::hstack()
+                .wrap()
+                .gap(16.0)
+                .padding(20.0)
+                .children(items)
+                .build(),
         )
-        .child(
-            grid_row(&[
-                ("photo", "Screenshot 2026-\u{2026}"),
-                ("opticaldisc", "arduino-ide_2.3\u{2026}"),
-                ("opticaldisc", "HyprMac.dmg"),
-                ("opticaldisc", "HyprMac-0.17.1.dmg"),
-                ("archivebox", "agram-1.4.7-mac\u{2026}"),
-                ("opticaldisc", "SideloadlySetup\u{2026}"),
-                ("rectangle.on.rectangle", "2608_ServiceRevi\u{2026}"),
-                ("doc.text", "SKILL (1).md"),
-            ]),
-        )
-        .child(
-            grid_row(&[
-                ("photo", "Screenshot 2026-\u{2026}"),
-                ("photo", "image5.png"),
-                ("photo", "image4.png"),
-                ("photo", "image3.png"),
-                ("photo", "1image.png"),
-                ("rectangle.on.rectangle", "Travel Payments\u{2026}"),
-                ("photo", "222image.png"),
-                ("opticaldisc", "Raycast_2.4.1.0_\u{2026}"),
-            ]),
-        );
+        .build();
 
     let tree = rn::ComponentTree::new(
         rn::window()

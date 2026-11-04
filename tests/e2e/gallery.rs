@@ -415,6 +415,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
         min_height: None,
         children: vec![
             // hstack: label("Name:") + TextInput
@@ -429,6 +430,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
                 min_height: None,
                 children: vec![
                     LayoutSpec {
@@ -442,6 +444,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
                         min_height: None,
                         children: vec![],
                     },
@@ -456,6 +459,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
                         min_height: None,
                         children: vec![],
                     },
@@ -473,6 +477,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
                 min_height: None,
                 children: vec![],
             },
@@ -488,6 +493,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
                 min_height: None,
                 children: vec![],
             },
@@ -503,6 +509,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
                 min_height: None,
                 children: vec![
                     LayoutSpec {
@@ -516,6 +523,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
                         min_height: None,
                         children: vec![],
                     },
@@ -530,6 +538,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
                         min_height: None,
                         children: vec![],
                     },
@@ -544,6 +553,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
                         min_height: None,
                         children: vec![],
                     },
@@ -561,6 +571,7 @@ fn layout_result_has_nonzero_rects_for_all_widgets() {
         flex_grow: 0.0,
         justify: 0,
         align: 0,
+        wrap: 0,
                 min_height: None,
                 children: vec![],
             },

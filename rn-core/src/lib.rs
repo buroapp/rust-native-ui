@@ -211,6 +211,8 @@ pub enum PropKey {
     ModernLook,
     /// Cross-axis alignment of a container's children.
     Align,
+    /// Wrap children onto new lines instead of overflowing.
+    Wrap,
     // Numeric range & value
     Value,
     Min,

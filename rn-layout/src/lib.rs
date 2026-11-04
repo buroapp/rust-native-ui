@@ -57,6 +57,8 @@ pub struct LayoutSpec {
     pub justify: u8,
     /// Cross-axis alignment: 0=stretch (default), 1=start, 2=center, 3=end.
     pub align: u8,
+    /// Wrap children onto new lines when they overflow: 0=no (default), 1=wrap.
+    pub wrap: u8,
     pub children: Vec<LayoutSpec>,
 }
 
@@ -119,6 +121,11 @@ pub fn compute_layout(spec: &LayoutSpec, container: Rect) -> LayoutResult {
                 5 => JustifyContent::SpaceEvenly,
                 _ => JustifyContent::Start,
             }),
+            flex_wrap: if spec.wrap == 1 {
+                FlexWrap::Wrap
+            } else {
+                FlexWrap::NoWrap
+            },
             align_items: Some(match spec.align {
                 1 => AlignItems::Start,
                 2 => AlignItems::Center,

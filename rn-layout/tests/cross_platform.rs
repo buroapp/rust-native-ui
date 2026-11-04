@@ -34,6 +34,7 @@ fn node(
         flex_grow: grow,
         justify: 0,
         align: 0,
+        wrap: 0,
         children,
     }
 }

@@ -27,6 +27,28 @@ pub struct Component {
 }
 
 impl Component {
+    /// Set a prop on an already-built component.
+    #[must_use]
+    pub fn prop(mut self, key: PropKey, value: PropValue) -> Self {
+        self.props.insert(key, value);
+        self
+    }
+
+    /// Centre this component's text.
+    #[must_use]
+    pub fn text_center(mut self) -> Self {
+        self.props.insert(PropKey::TextAlign, PropValue::F32(2.0));
+        self
+    }
+
+    /// Wrap this component's text onto at most `lines` lines.
+    #[must_use]
+    pub fn lines(mut self, lines: u8) -> Self {
+        self.props
+            .insert(PropKey::MaxLines, PropValue::F32(f32::from(lines)));
+        self
+    }
+
     pub fn new(kind: ComponentKind) -> Self {
         Self {
             kind,
@@ -113,6 +135,26 @@ impl ComponentBuilder {
     }
 
     /// Align children to the end of the main axis.
+    /// Let children wrap onto new lines when they do not fit.
+    pub fn wrap(self) -> Self {
+        self.prop(PropKey::Wrap, PropValue::F32(1.0))
+    }
+
+    /// Centre the text inside a label.
+    pub fn text_center(self) -> Self {
+        self.prop(PropKey::TextAlign, PropValue::F32(2.0))
+    }
+
+    /// Wrap text onto at most `lines` lines before truncating.
+    pub fn lines(self, lines: u8) -> Self {
+        self.prop(PropKey::MaxLines, PropValue::F32(f32::from(lines)))
+    }
+
+    /// Wrap text instead of truncating it on one line.
+    pub fn text_wrap(self) -> Self {
+        self.prop(PropKey::TextWrap, PropValue::Bool(true))
+    }
+
     /// Centre children on the cross axis.
     pub fn align_center(self) -> Self {
         self.prop(PropKey::Align, PropValue::F32(2.0))
