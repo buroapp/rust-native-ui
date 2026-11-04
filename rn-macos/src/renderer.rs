@@ -2261,6 +2261,10 @@ fn update_node(
     let Some(handle) = state.nodes.get(&node_id) else {
         return Err(RenderError::InvalidNode(node_id));
     };
+    let is_sidebar_row = state
+        .shadow
+        .get(&node_id)
+        .is_some_and(|s| matches!(s.kind, ComponentKind::SidebarItem));
     for (key, value) in &changed {
         match (handle, key) {
             (NativeHandle::Window(w), PropKey::Title) => {
@@ -2310,14 +2314,51 @@ fn update_node(
                 }
             }
             (NativeHandle::SidebarWidget(_), PropKey::Selected) => {} // selection styling handled via SidebarItem
-            // SidebarItem selection: update NSBox fill color
-            // The row is stored as NativeHandle::View (NSBox cast to NSView).
-            // We update via the shadow prop — the reconciler will re-render with
-            // the new Selected value, rebuilding the row with correct colors.
-            (NativeHandle::View(_, _), PropKey::Selected) => {
-                // No direct NSBox cast available here — rely on full re-render.
-                // The view will be rebuilt with the correct fillColor on the next
-                // reconciler cycle (the shadow prop update below triggers it).
+            // SidebarItem selection: repaint the row in place.
+            //
+            // The row is an NSBox stored as a plain View, so the fill colour and the
+            // label have to be updated here. This used to be a no-op that claimed a
+            // re-render would fix it; nothing re-rendered, so the highlight stayed
+            // on whichever row happened to be selected first.
+            (NativeHandle::View(view, _), PropKey::Selected) if is_sidebar_row => {
+                let selected = matches!(value, PropValue::Bool(true));
+                // The stored view is an NSBox cast to NSView when the row was built.
+                let row: &NSBox = unsafe { &*(view.as_ref() as *const NSView as *const NSBox) };
+                unsafe {
+                    let fill = if selected {
+                        NSColor::controlAccentColor()
+                    } else {
+                        NSColor::clearColor()
+                    };
+                    row.setFillColor(&fill);
+                }
+                let (text_color, font) = unsafe {
+                    if selected {
+                        (
+                            NSColor::whiteColor(),
+                            NSFont::boldSystemFontOfSize(13.0),
+                        )
+                    } else {
+                        (
+                            NSColor::labelColor(),
+                            NSFont::systemFontOfSize(13.0),
+                        )
+                    }
+                };
+                if let Some(cv) = unsafe { row.contentView() } {
+                    let subviews = unsafe { cv.subviews() };
+                    if subviews.count() > 0 {
+                        let first = unsafe { subviews.objectAtIndex(0) };
+                        // The first subview is the row's label, added before the button.
+                        let label: &NSTextField = unsafe {
+                            &*(first.as_ref() as *const NSView as *const NSTextField)
+                        };
+                        unsafe {
+                            label.setTextColor(Some(&text_color));
+                            label.setFont(Some(&font));
+                        }
+                    }
+                }
             }
             _ => {}
         }
