@@ -68,6 +68,7 @@ pub enum ComponentKind {
     SearchBar,
     Sidebar,
     SidebarItem,
+    SidebarSection,
     GroupedSection,
     SplitView,
     Toolbar,
@@ -140,6 +141,7 @@ impl ComponentKind {
         ComponentKind::SearchBar,
         ComponentKind::Sidebar,
         ComponentKind::SidebarItem,
+        ComponentKind::SidebarSection,
         ComponentKind::GroupedSection,
         ComponentKind::SplitView,
         ComponentKind::Toolbar,
@@ -173,7 +175,7 @@ impl ComponentKind {
     /// Number of distinct component kinds. `ComponentKind::ALL.len()` must equal
     /// this; a test enforces it so a new variant cannot be added without
     /// appearing in `ALL`, which is what forces backends to implement it.
-    pub const COUNT: usize = 57;
+    pub const COUNT: usize = 60;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

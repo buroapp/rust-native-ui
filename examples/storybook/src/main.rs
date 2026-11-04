@@ -110,24 +110,22 @@ fn main() -> Result<(), rn::RnError> {
 
                 let mut ids = Ids::new(pool.as_ref().clone());
 
-                // ---- Sidebar: grouped by category, one row per component ----
+                // ---- Sidebar: the component groups and scrolls its own rows ----
                 let mut nav_items: Vec<rn::Component> = Vec::new();
                 let mut last_category = "";
                 for (i, e) in CATALOG.iter().enumerate() {
                     if e.category != last_category {
                         last_category = e.category;
-                        nav_items.push(rn::label(e.category));
+                        nav_items.push(rn::sidebar_section(e.category).build());
                     }
                     nav_items.push(
-                        rn::sidebar_item(
-                            e.name,
-                            nav_ids.get(i).copied().unwrap_or_else(HandlerId::new),
-                        )
-                        .prop(rn::PropKey::Selected, rn::PropValue::Bool(i == selected))
-                        .build(),
+                        rn::sidebar_item(e.name, nav_ids[i])
+                            .prop(rn::PropKey::Selected, rn::PropValue::Bool(i == selected))
+                            .build(),
                     );
                 }
 
+                // The Sidebar is a vibrancy surface; scrolling is the caller's call.
                 let sidebar = rn::sidebar()
                     .prop(rn::PropKey::SidebarWidth, rn::PropValue::F32(260.0))
                     .child(

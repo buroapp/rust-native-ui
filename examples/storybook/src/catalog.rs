@@ -294,6 +294,25 @@ fn sidebar_demos(ids: &mut Ids) -> Vec<Demo> {
     vec![demo("Four items", rn::sidebar().children(items).build())]
 }
 
+fn sidebar_section_demos(ids: &mut Ids) -> Vec<Demo> {
+    vec![demo(
+        "Section with rows",
+        rn::sidebar()
+            .child(
+                rn::vstack()
+                    .padding(6.0)
+                    .gap(2.0)
+                    .child(rn::sidebar_section("Basic").build())
+                    .child(rn::sidebar_item("Buttons", ids.take()).build())
+                    .child(rn::sidebar_item("Labels", ids.take()).build())
+                    .child(rn::sidebar_section("Layout").build())
+                    .child(rn::sidebar_item("TabView", ids.take()).build())
+                    .build(),
+            )
+            .build(),
+    )]
+}
+
 fn sidebar_item_demos(ids: &mut Ids) -> Vec<Demo> {
     vec![
         demo(
@@ -688,6 +707,7 @@ pub const CATALOG: &[Entry] = &[
 
     Entry { category: "Lists", name: "Sidebar", summary: "Navigation rail", build: sidebar_demos },
     Entry { category: "Lists", name: "SidebarItem", summary: "A sidebar row", build: sidebar_item_demos },
+    Entry { category: "Lists", name: "SidebarSection", summary: "Group header in a sidebar", build: sidebar_section_demos },
     Entry { category: "Lists", name: "ListTile", summary: "Settings-style row", build: list_tile_demos },
     Entry { category: "Lists", name: "GroupedSection", summary: "Grouped rows with dividers", build: grouped_section_demos },
     Entry { category: "Lists", name: "FlatList", summary: "Virtualised list", build: flat_list_demos },

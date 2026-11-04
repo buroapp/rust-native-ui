@@ -534,6 +534,15 @@ pub fn sidebar_item(label: impl Into<String>, on_select: HandlerId) -> Component
         .prop(PropKey::Selected, PropValue::Bool(false))
 }
 
+/// A section header inside a `Sidebar`.
+///
+/// Sidebars group their rows; without this every caller passed a plain `label`
+/// and had to group the rows itself.
+pub fn sidebar_section(title: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::SidebarSection)
+        .prop(PropKey::Text, PropValue::String(title.into()))
+}
+
 /// Start building a `GroupedSection` component.
 pub fn grouped_section() -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::GroupedSection)

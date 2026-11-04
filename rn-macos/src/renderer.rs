@@ -284,9 +284,6 @@ struct RendererState {
     windows: Vec<NodeId>,
     pending_events: Vec<Event>,
     _tick_timer: Option<Retained<NSTimer>>,
-    /// The selected row we last scrolled into view. Interior mutability so the
-    /// layout pass (which takes `&self`) can record it.
-    last_ensured_selection: std::cell::Cell<Option<u64>>,
     /// Sheets already presented, so a relayout cannot present the same sheet twice.
     presented_sheets: std::cell::RefCell<std::collections::HashSet<NodeId>>,
 }
@@ -300,7 +297,6 @@ impl RendererState {
             windows: Vec::new(),
             pending_events: Vec::new(),
             _tick_timer: None,
-            last_ensured_selection: std::cell::Cell::new(None),
             presented_sheets: std::cell::RefCell::new(std::collections::HashSet::new()),
         }
     }
@@ -1700,6 +1696,32 @@ fn create_node(
         }
 
         // ------------------------------------------------------------------
+        // SidebarSection — small caps group header inside a sidebar
+        // ------------------------------------------------------------------
+        ComponentKind::SidebarSection => {
+            let title = match props.get(&PropKey::Text) {
+                Some(PropValue::String(s)) => s.clone(),
+                _ => String::new(),
+            };
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(200.0, 18.0));
+            let tf: Retained<NSTextField> = unsafe {
+                let t = NSTextField::initWithFrame(mtm.alloc(), frame);
+                t.setEditable(false);
+                t.setBordered(false);
+                t.setDrawsBackground(false);
+                t.setStringValue(&NSString::from_str(&title.to_uppercase()));
+                t.setFont(Some(&NSFont::boldSystemFontOfSize(11.0)));
+                t.setTextColor(Some(&NSColor::secondaryLabelColor()));
+                t.setLineBreakMode(NSLineBreakMode(4));
+                t
+            };
+            attach_to_parent(state, parent_id, &tf);
+            state.nodes.insert(node_id, NativeHandle::Label(tf));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
         // TabView — native NSTabView
         // ------------------------------------------------------------------
         ComponentKind::TabView => {
@@ -1992,15 +2014,15 @@ fn create_node(
                 v.setMaterial(NSVisualEffectMaterial::Sidebar);
                 v
             };
+            // The sidebar is a vibrancy surface only. Scrolling is the caller's
+            // choice — usually a ScrollView as its single child — because a sidebar
+            // sometimes holds fixed chrome that must not scroll.
             attach_to_parent(state, parent_id, &vev);
             state.nodes.insert(node_id, NativeHandle::SidebarWidget(unsafe { Retained::cast(vev) }));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
 
-        // ------------------------------------------------------------------
-        // SidebarItem — Clickable row with native selection highlight (FR-026)
-        // ------------------------------------------------------------------
         ComponentKind::SidebarItem => {
             let label_text = if let Some(PropValue::String(s)) = props.get(&PropKey::Text) {
                 s.clone()
@@ -2542,6 +2564,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::SearchBar => (None, Some(28.0)),
         ComponentKind::StatusBar => (None, Some(22.0)),
         ComponentKind::SidebarItem => (None, Some(28.0)),
+        ComponentKind::SidebarSection => (None, Some(18.0)),
         ComponentKind::ListTile => (None, Some(44.0)),               
         ComponentKind::TitleBar => (None, Some(28.0)),               
         ComponentKind::IconButton => (Some(28.0), Some(28.0)),
@@ -2681,7 +2704,11 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
                 doc.setFrame(NSRect::new(
                     NSPoint::new(0.0, 0.0),
                     NSSize::new(width as f64, *h as f64),
-                ))
+                ));
+                // AppKit defers layout of the new document bounds. Without forcing it
+                // here, that deferred pass runs after we set a scroll position and
+                // overwrites it — which is why reveal appeared to do nothing.
+                sv.layoutSubtreeIfNeeded();
             };
         }
     }
@@ -2733,8 +2760,9 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
         let parent_is_scroll = shadow_parent_id.is_some_and(|pid| {
             matches!(
                 state.nodes.get(&pid),
-                Some(NativeHandle::ScrollViewWidget(_)) | Some(NativeHandle::FlatListWidget(..))
-            )
+                Some(NativeHandle::ScrollViewWidget(_))
+                    | Some(NativeHandle::FlatListWidget(..))
+                )
         });
         let flipped_y = if parent_is_scroll {
             local_y
@@ -2753,7 +2781,7 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
         unsafe { view.setFrame(ns) };
     }
 
-    ensure_selection_visible(state, result);
+    ensure_selection_visible(state);
     present_sheets(state, result);
 }
 
@@ -2791,15 +2819,18 @@ fn present_sheets(state: &RendererState, result: &rn_layout::LayoutResult) {
     }
 }
 
-/// Scroll a container so its selected row is on screen.
+/// Reveal each selected row inside whatever scroll view contains it.
 ///
-/// Selection is usually set from the application, not by scrolling, so without
-/// this a deep-linked or programmatically selected row can sit far outside the
-/// visible part of a long list and the user sees no highlight at all. Only acts
-/// when the selection actually changes, otherwise a relayout caused by an
-/// unrelated event would yank the user's scroll position back.
-fn ensure_selection_visible(state: &RendererState, result: &rn_layout::LayoutResult) {
-    let mut selected: Option<NodeId> = None;
+/// Selection is usually set by the application, not by scrolling, so a deeply
+/// selected row can sit far outside the visible part of a long list and the user
+/// sees no highlight at all.
+///
+/// `scrollRectToVisible` is the AppKit primitive for exactly this: it scrolls the
+/// nearest enclosing scroll view just far enough, and does nothing when the rect is
+/// already visible. That makes this idempotent — it can run on every layout pass —
+/// and it removes any coordinate maths of our own, which is where the flipping and
+/// document-height assumptions used to go wrong.
+fn ensure_selection_visible(state: &RendererState) {
     for (id, sn) in &state.shadow {
         if !matches!(
             sn.kind,
@@ -2807,60 +2838,16 @@ fn ensure_selection_visible(state: &RendererState, result: &rn_layout::LayoutRes
         ) {
             continue;
         }
-        if matches!(sn.props.get(&PropKey::Selected), Some(PropValue::Bool(true))) {
-            selected = Some(*id);
-            break;
+        if !matches!(sn.props.get(&PropKey::Selected), Some(PropValue::Bool(true))) {
+            continue;
         }
-    }
-
-    let Some(sel) = selected else {
-        return;
-    };
-    if state.last_ensured_selection.get() == Some(sel.0) {
-        return;
-    }
-
-    // Walk up to the nearest scrolling ancestor.
-    let mut cursor = state.shadow.get(&sel).and_then(|s| s.parent);
-    while let Some(pid) = cursor {
-        let is_scroll = matches!(
-            state.nodes.get(&pid),
-            Some(NativeHandle::ScrollViewWidget(_)) | Some(NativeHandle::FlatListWidget(..))
-        );
-        if is_scroll {
-            let Some(handle) = state.nodes.get(&pid) else {
-                return;
-            };
-            let sv = match handle {
-                NativeHandle::ScrollViewWidget(sv) => sv,
-                NativeHandle::FlatListWidget(sv, _) => sv,
-                _ => return,
-            };
-            let (Some(sel_rect), Some(port_rect)) = (
-                result.rects.get(&rn_layout::LayoutNodeId(sel.0)),
-                result.rects.get(&rn_layout::LayoutNodeId(pid.0)),
-            ) else {
-                return;
-            };
-
-            // Distance of the row from the top of the scrolled content.
-            let offset_in_doc = sel_rect.y - port_rect.y;
-            let doc_height = unsafe { sv.documentView() }
-                .map_or(0.0, |d| d.frame().size.height);
-            let max_scroll = (doc_height as f32 - port_rect.height).max(0.0);
-            // Centre the row when possible; clamp so we never overscroll.
-            let target = (offset_in_doc - (port_rect.height - sel_rect.height) / 2.0)
-                .clamp(0.0, max_scroll);
-
-            unsafe {
-                let clip = sv.contentView();
-                let _: () = msg_send![&*clip, scrollToPoint: NSPoint::new(0.0, target as f64)];
-                sv.reflectScrolledClipView(&clip);
-            }
-            state.last_ensured_selection.set(Some(sel.0));
-            return;
+        let Some(view) = state.nodes.get(id).and_then(NativeHandle::as_view) else {
+            continue;
+        };
+        let revealed = unsafe { view.scrollRectToVisible(view.bounds()) };
+        if revealed {
+            log::debug!("revealed selection {:?}", id);
         }
-        cursor = state.shadow.get(&pid).and_then(|s| s.parent);
     }
 }
 

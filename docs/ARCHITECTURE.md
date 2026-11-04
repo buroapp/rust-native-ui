@@ -124,14 +124,14 @@ This has driven three rewrites:
 
 ## Component inventory
 
-- ~57 `ComponentKind` variants, all documented and rendered in
+- 60 `ComponentKind` variants, all documented and rendered in
   [`examples/storybook`](../examples/storybook).
 - ~80 `PropKey` variants, 15 `PropValue` variants, 13 `EventPayload` variants.
 - 72 public builders in `rn`.
 
 Built-in layouts mirror the `macos_ui` set: `window` (with the modern
 full-size-content look via `.modern(true)`), `scaffold`, `sidebar` +
-`sidebar_item`, `toolbar`, `list_tile`, `tab_view` + `tab_item`, `content_area`,
+`sidebar_item` + `sidebar_section`, `toolbar`, `list_tile`, `tab_view` + `tab_item`, `content_area`,
 `split_view` and `safe_area_view`. The sliver toolbar is not a separate
 component: a `toolbar` placed as a child of a scroll view scrolls away with the
 content, which is what the pattern means. A modern window renders content from
