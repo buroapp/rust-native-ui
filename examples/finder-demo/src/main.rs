@@ -152,6 +152,7 @@ fn main() -> Result<(), rn::RnError> {
 
     let tree = rn::ComponentTree::new(
         rn::window()
+        .modern(true)
             .title("Recents")
             .size(1100.0, 700.0)
             .on_close(close)

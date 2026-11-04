@@ -113,6 +113,7 @@ fn main() -> Result<(), rn::RnError> {
 
             ComponentTree::new(
                 rn::window()
+        .modern(true)
                     .title("Mail Demo")
                     .size(900.0, 600.0)
                     .on_close(close_id)

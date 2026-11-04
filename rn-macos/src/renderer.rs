@@ -2599,6 +2599,14 @@ fn relayout_window(state: &RendererState, window_id: NodeId) {
         content_rect.width,
         content_rect.height
     );
+    // A full-size content view runs under the titlebar, so it must start below the
+    // band or the first row of every pane hides behind the traffic lights.
+    let inset = titlebar_inset(&content_view);
+    let content_rect = Rect {
+        y: content_rect.y + inset,
+        height: (content_rect.height - inset).max(0.0),
+        ..content_rect
+    };
     let result = compute_layout(&spec, content_rect);
     log::debug!("relayout_window: {} rects computed", result.rects.len());
     // Log first 6 rects by node id for layout debugging
@@ -2800,6 +2808,29 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
     })
 }
 
+/// How much of the window the titlebar covers. With a full-size content view this is
+/// the traffic-light band, plus the toolbar when the window has one.
+fn titlebar_inset(content_view: &NSView) -> f32 {
+    let Some(window) = content_view.window() else {
+        return 0.0;
+    };
+    if !window
+        .styleMask()
+        .contains(NSWindowStyleMask::FullSizeContentView)
+    {
+        return 0.0;
+    }
+    let full = content_view.frame().size.height;
+    let usable = unsafe { window.contentLayoutRect() }.size.height;
+    let inset = full - usable;
+    log::debug!("titlebar_inset: content {:.0} usable {:.0} -> {:.0}", full, usable, inset);
+    if inset > 0.0 {
+        inset as f32
+    } else {
+        0.0
+    }
+}
+
 fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout::LayoutResult) {
     let content_height = content_view.frame().size.height as f32;
 
@@ -2920,14 +2951,34 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
                     | Some(NativeHandle::FlatListWidget(..))
                 )
         });
+        // A sidebar's surface runs to the top of the window, behind the traffic
+        // lights, while its rows stay below the band. That is the whole visual
+        // difference between a pane and a sidebar in modern macOS.
+        let inset = titlebar_inset(content_view);
+        let is_sidebar = state
+            .shadow
+            .get(&node_id)
+            .is_some_and(|s| s.kind == ComponentKind::Sidebar);
+        if is_sidebar {
+            log::debug!(
+                "sidebar {:?}: inset {:.0} local_y {:.0} h {:.0}",
+                node_id, inset, local_y, rect.height
+            );
+        }
+        let (local_y, height) = if is_sidebar && inset > 0.0 && local_y <= inset + 0.5 {
+            (0.0, rect.height + inset)
+        } else {
+            (local_y, rect.height)
+        };
+
         let flipped_y = if parent_is_scroll {
             local_y
         } else {
-            superview_height - local_y - rect.height
+            superview_height - local_y - height
         };
         let ns = NSRect::new(
             NSPoint::new(local_x as f64, flipped_y as f64),
-            NSSize::new(rect.width as f64, rect.height as f64),
+            NSSize::new(rect.width as f64, height as f64),
         );
         log::trace!(
             "setFrame {:?} → x={:.0} y={:.0} w={:.0} h={:.0} (abs:{:.0},{:.0} parent:{:?})",
@@ -3264,6 +3315,14 @@ declare_class!(
                 ivars.window.setToolbar(Some(&toolbar));
                 ivars.window.setToolbarStyle(NSWindowToolbarStyle::Unified);
             }
+            // The toolbar changed the height of the band the window draws over the
+            // content, so every pane has to be inset again. Safe to borrow here: this
+            // runs on a timer, outside the render pass.
+            with_state(|s| {
+                for window_id in s.windows.clone() {
+                    relayout_window(s, window_id);
+                }
+            });
         }
 
         #[method_id(toolbarDefaultItemIdentifiers:)]
