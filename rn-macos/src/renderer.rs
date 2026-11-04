@@ -30,7 +30,8 @@ use objc2_app_kit::{
     NSColor, NSColorWell, NSControlTextEditingDelegate, NSControlStateValueOff, NSControlStateValueOn,
     NSDatePicker, NSDatePickerStyle, NSImageView, NSLineBreakMode, NSPopUpButton, NSProgressIndicator,
     NSScrollView, NSSlider, NSTextField, NSTextFieldDelegate,
-    NSAutoresizingMaskOptions, NSAlert, NSTabView, NSTabViewItem, NSTextView, NSStepper, NSView, NSWindow, NSWindowDelegate,
+    NSAutoresizingMaskOptions, NSAlert, NSTabView, NSTabViewItem, NSToolbar, NSToolbarItem,
+    NSToolbarItemIdentifier, NSToolbarDelegate, NSToolbarDisplayMode, NSWindowToolbarStyle, NSTextView, NSStepper, NSView, NSWindow, NSWindowDelegate,
     NSWindowStyleMask, NSWindowTitleVisibility,
     NSBox, NSBoxType, NSDatePickerElementFlags, NSDatePickerMode, NSImage,
     NSLevelIndicator, NSLevelIndicatorStyle, NSSearchField,
@@ -42,7 +43,7 @@ use objc2_app_kit::{
 use objc2_app_kit::{NSFont, NSFontManager, NSForegroundColorAttributeName, NSFontAttributeName};
 use objc2_foundation::NSMutableAttributedString;
 use objc2_foundation::{
-    MainThreadMarker, NSDate,
+    MainThreadMarker, NSArray, NSDate,
     NSNotification, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize,
     NSString, NSTimer,
 };
@@ -2277,44 +2278,42 @@ fn create_node(
         // Toolbar — NSView hosting toolbar-style buttons (FR-029)
         // ------------------------------------------------------------------
         ComponentKind::Toolbar => {
-            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 36.0));
-            let container: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
+            // An NSToolbar belongs to the window and lives in its titlebar. It is not
+            // a view, so the content tree keeps only a zero-height placeholder and the
+            // window chrome owns the space and the geometry.
             if let Some(PropValue::ToolbarActions(actions)) = props.get(&PropKey::ToolbarActions) {
-                let mut x: f64 = 8.0;
-                for action in actions {
-                    if action.separator {
-                        x += 8.0;
-                        continue;
-                    }
-                    let btn_frame = NSRect::new(NSPoint::new(x, 4.0), NSSize::new(28.0, 28.0));
-                    let btn: Retained<NSButton> = unsafe {
-                        NSButton::initWithFrame(mtm.alloc(), btn_frame)
+                if let Some(window) = enclosing_window(state, parent_id) {
+                    let delegate = ToolbarDelegate::new(
+                        mtm,
+                        ToolbarIvars {
+                            actions: actions.clone(),
+                            source: node_id,
+                            window,
+                            keep_alive: Default::default(),
+                        },
+                    );
+                    let obj: &AnyObject = &delegate;
+                    let _ = unsafe {
+                        NSTimer::scheduledTimerWithTimeInterval_target_selector_userInfo_repeats(
+                            0.0,
+                            obj,
+                            sel!(install:),
+                            None,
+                            false,
+                        )
                     };
-                    if let Some(icon) = &action.icon_name {
-                        let ns_name = NSString::from_str(icon);
-                        if let Some(img) = unsafe {
-                            NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
-                        } {
-                            unsafe { btn.setImage(Some(&img)) };
-                        }
-                    }
-                    unsafe {
-                        btn.setBezelStyle(NSBezelStyle::Toolbar);
-                        btn.setBordered(false);
-                        container.addSubview(&btn);
-                    }
-                    x += 36.0;
+                    stash_delegate(node_id, DelegateHandle::Toolbar(delegate));
                 }
             }
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0));
+            let container: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
             attach_to_parent(state, parent_id, &container);
             state.nodes.insert(node_id, NativeHandle::ToolbarWidget(container));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
 
-        // ------------------------------------------------------------------
-        // Switch — NSSwitch (macOS 10.15+) (FR-013)
-        // ------------------------------------------------------------------
+
         ComponentKind::Switch => {
             let value = bool_prop(&props, PropKey::SwitchValue, false);
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(50.0, 26.0));
@@ -2677,6 +2676,9 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::Tooltip => (None, Some(18.0)),
         ComponentKind::TimePicker => (Some(100.0), Some(26.0)),
         ComponentKind::GraphicalTimePicker => (Some(180.0), Some(160.0)),
+        // The toolbar is the window's NSToolbar now; it occupies no space in the
+        // content tree.
+        ComponentKind::Toolbar => (None, Some(0.0)),
         ComponentKind::ToolbarIconButton => (Some(32.0), Some(28.0)),
         ComponentKind::ToolbarDivider => (Some(1.0), Some(20.0)),
         ComponentKind::ToolbarPopup => (Some(120.0), Some(26.0)),
@@ -3190,6 +3192,140 @@ fn new_document_view(mtm: MainThreadMarker, size: NSSize) -> Retained<NSView> {
     }
 }
 
+/// Supplies `NSToolbarItem`s from the actions an application declared.
+///
+/// An `NSToolbar` is owned by the window and lives in its titlebar; it is not a view
+/// in the content tree. That is the whole difference between a real toolbar and the
+/// strip of buttons this used to render.
+struct ToolbarIvars {
+    actions: Vec<rn_core::ToolbarAction>,
+    source: NodeId,
+    window: Retained<NSWindow>,
+    /// Nothing else retains the item targets, and they must outlive the toolbar.
+    keep_alive: std::cell::RefCell<Vec<Retained<ButtonTarget>>>,
+}
+
+impl std::fmt::Debug for ToolbarIvars {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolbarIvars")
+            .field("actions", &self.actions.len())
+            .finish()
+    }
+}
+
+impl ToolbarDelegate {
+    fn new(mtm: MainThreadMarker, ivars: ToolbarIvars) -> Retained<Self> {
+        let this = mtm.alloc().set_ivars(ivars);
+        unsafe { msg_send_id![super(this), init] }
+    }
+}
+
+/// Separators and flexible space are supplied by AppKit itself, so they are not
+/// given an identifier here.
+fn toolbar_identifiers(actions: &[rn_core::ToolbarAction]) -> Vec<Retained<NSString>> {
+    actions
+        .iter()
+        .filter(|a| !a.separator)
+        .map(|a| NSString::from_str(&a.id))
+        .collect()
+}
+
+declare_class!(
+    struct ToolbarDelegate;
+
+    unsafe impl ClassType for ToolbarDelegate {
+        type Super = NSObject;
+        type Mutability = mutability::MainThreadOnly;
+        const NAME: &'static str = "RnToolbarDelegate";
+    }
+
+    impl DeclaredClass for ToolbarDelegate {
+        type Ivars = ToolbarIvars;
+    }
+
+    unsafe impl ToolbarDelegate {
+        /// Installing a toolbar makes AppKit lay the window out immediately, which
+        /// re-enters our render state and panics on an already-borrowed RefCell.
+        /// So the install runs on a later runloop turn, outside the render pass.
+        #[method(install:)]
+        fn install(&self, _timer: Option<&NSTimer>) {
+            let ivars = self.ivars();
+            let mtm = match MainThreadMarker::new() {
+                Some(m) => m,
+                None => return,
+            };
+            let toolbar = unsafe {
+                NSToolbar::initWithIdentifier(mtm.alloc(), &NSString::from_str("rn.toolbar"))
+            };
+            unsafe {
+                toolbar.setDelegate(Some(ProtocolObject::from_ref(self)));
+                toolbar.setDisplayMode(NSToolbarDisplayMode::IconAndLabel);
+                toolbar.setAllowsUserCustomization(false);
+                ivars.window.setToolbar(Some(&toolbar));
+                ivars.window.setToolbarStyle(NSWindowToolbarStyle::Unified);
+            }
+        }
+
+        #[method_id(toolbarDefaultItemIdentifiers:)]
+        fn default_identifiers(&self, _toolbar: &NSToolbar) -> Retained<NSArray<NSToolbarItemIdentifier>> {
+            let ids = toolbar_identifiers(&self.ivars().actions);
+            NSArray::from_id_slice(&ids)
+        }
+
+        #[method_id(toolbarAllowedItemIdentifiers:)]
+        fn allowed_identifiers(&self, _toolbar: &NSToolbar) -> Retained<NSArray<NSToolbarItemIdentifier>> {
+            let ids = toolbar_identifiers(&self.ivars().actions);
+            NSArray::from_id_slice(&ids)
+        }
+
+        #[method_id(toolbar:itemForItemIdentifier:willBeInsertedIntoToolbar:)]
+        fn item_for_identifier(
+            &self,
+            _toolbar: &NSToolbar,
+            identifier: &NSToolbarItemIdentifier,
+            _will_be_inserted: bool,
+        ) -> Option<Retained<NSToolbarItem>> {
+            let ivars = self.ivars();
+            let want = identifier.to_string();
+            let matched = ivars
+                .actions
+                .iter()
+                .find(|a| !a.separator && a.id == want);
+
+            // Written as one expression: the objc2 macro wraps the tail value, not an
+            // early `return None`.
+            match (MainThreadMarker::new(), matched) {
+                (Some(mtm), Some(action)) => {
+                    let item = unsafe { NSToolbarItem::initWithItemIdentifier(mtm.alloc(), identifier) };
+                    let label = action.label.clone().unwrap_or_else(|| action.id.clone());
+                    unsafe {
+                        item.setPaletteLabel(&NSString::from_str(&label));
+                        item.setLabel(&NSString::from_str(&label));
+                        item.setBordered(true);
+                        item.setEnabled(action.enabled);
+                        if let Some(icon) = &action.icon_name {
+                            if let Some(image) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                                &NSString::from_str(icon),
+                                Some(&NSString::from_str(&label)),
+                            ) {
+                                item.setImage(Some(&image));
+                            }
+                        }
+                        let target = ButtonTarget::new(mtm, action.handler, ivars.source);
+                        item.setTarget(Some(&target));
+                        item.setAction(Some(sel!(fire:)));
+                        ivars.keep_alive.borrow_mut().push(target);
+                    }
+                    Some(item)
+                }
+                _ => None,
+            }
+        }
+    }
+    unsafe impl NSObjectProtocol for ToolbarDelegate {}
+    unsafe impl NSToolbarDelegate for ToolbarDelegate {}
+);
+
 /// Presents a real `NSAlert` as a sheet on the window that owns the component.
 ///
 /// An alert is a modal system object, not a view: it cannot be a child in the view
@@ -3558,6 +3694,8 @@ enum DelegateHandle {
     Tick(Retained<TickTarget>),
     Alert(Retained<AlertTarget>),
     TabItem(Retained<NSTabViewItem>),
+    /// The window retains the toolbar; the delegate must not die with the render pass.
+    Toolbar(Retained<ToolbarDelegate>),
 }
 
 thread_local! {
