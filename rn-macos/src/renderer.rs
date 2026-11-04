@@ -556,10 +556,19 @@ fn create_node(
         ComponentKind::Label => {
             let text = string_prop(&props, PropKey::Text, "");
             let ns_text = NSString::from_str(&text);
-            let label: Retained<NSTextField> =
-                unsafe { NSTextField::labelWithString(&ns_text, mtm) };
             let max_lines = f32_prop(&props, PropKey::MaxLines, 1.0).max(1.0) as usize;
             let wants_wrap = bool_prop(&props, PropKey::TextWrap, false) || max_lines > 1;
+
+            // AppKit ships a label already configured to wrap. Building an ordinary
+            // label and poking its cell afterwards does not make it wrap — that is
+            // why MaxLines produced a taller box with the same single line in it.
+            let label: Retained<NSTextField> = unsafe {
+                if wants_wrap {
+                    NSTextField::wrappingLabelWithString(&ns_text, mtm)
+                } else {
+                    NSTextField::labelWithString(&ns_text, mtm)
+                }
+            };
             unsafe {
                 label.setEditable(false);
                 label.setSelectable(false);
@@ -573,16 +582,8 @@ fn create_node(
                     _ => objc2_app_kit::NSTextAlignment::Left,
                 });
                 if wants_wrap {
-                    // Word wrapping, capped at the requested line count.
-                    label.setLineBreakMode(NSLineBreakMode(0));
+                    label.setLineBreakMode(NSLineBreakMode(0)); // word wrapping
                     label.setMaximumNumberOfLines(max_lines as isize);
-                    label.setUsesSingleLineMode(false);
-                    // The cell, not the field, decides whether text wraps.
-                    let cell: *mut AnyObject = msg_send![&*label, cell];
-                    if !cell.is_null() {
-                        let _: () = msg_send![cell, setWraps: true];
-                        let _: () = msg_send![cell, setScrollable: false];
-                    }
                 } else {
                     label.setLineBreakMode(NSLineBreakMode(4)); // truncate tail
                     label.setMaximumNumberOfLines(1);
@@ -2727,6 +2728,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
     let fixed_width = f32_opt(&shadow.props, PropKey::Width).or(fixed_width);
     let fixed_height = f32_opt(&shadow.props, PropKey::Height).or(fixed_height);
 
+
     // Labels with no explicit width use a minimum of 60px so they don't
     // collapse to zero in hstack layouts where other fixed-width siblings
     // compete for space.
@@ -2736,6 +2738,11 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         }
         _ => f32_opt(&shadow.props, PropKey::MinWidth),
     };
+    // A declared width is a floor, not a wish. Without this flex shrink overrides
+    // it whenever a sibling's content is wider — which is how a 200pt sidebar
+    // collapsed to 71pt next to a wide wrapping grid. CSS behaves the same way:
+    // flex items shrink below their width unless the minimum is pinned.
+    let min_width = min_width.or(fixed_width);
     // A TabView's pages are sized by NSTabView, not by flex layout. Feeding them
     // to taffy would compute a second, competing rect for each page.
     let forces_no_children = matches!(shadow.kind, ComponentKind::TabView);
