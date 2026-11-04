@@ -2699,7 +2699,9 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::Badge => (Some(60.0), Some(20.0)),
         ComponentKind::Skeleton => (None, Some(20.0)),
         ComponentKind::SegmentedControl => (Some(220.0), Some(28.0)),
-        ComponentKind::SearchBar => (None, Some(28.0)),
+        // A search field with no width collapses to its two-point content minimum
+        // in a crowded toolbar — it was invisible in the Finder demo.
+        ComponentKind::SearchBar => (Some(160.0), Some(28.0)),
         ComponentKind::StatusBar => (None, Some(22.0)),
         ComponentKind::SidebarItem => (None, Some(28.0)),
         ComponentKind::SidebarSection => (None, Some(18.0)),
