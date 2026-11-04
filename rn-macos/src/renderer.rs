@@ -24,7 +24,7 @@ use std::sync::{Mutex, OnceLock};
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject};
-use objc2::{declare_class, msg_send_id, mutability, sel, ClassType, DeclaredClass};
+use objc2::{declare_class, msg_send, msg_send_id, mutability, sel, ClassType, DeclaredClass};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSBezelStyle, NSButton,
     NSColor, NSColorWell, NSControlTextEditingDelegate, NSControlStateValueOff, NSControlStateValueOn,
@@ -977,10 +977,7 @@ fn create_node(
                 // Children of a scroll view are placed in a document view, not on
                 // the scroll view itself — subviews of NSScrollView are clipped
                 // away because they are not part of the scrolled document.
-                let doc: Retained<NSView> = NSView::initWithFrame(
-                    mtm.alloc(),
-                    NSRect::new(NSPoint::new(0.0, 0.0), frame.size),
-                );
+                let doc = new_document_view(mtm, frame.size);
                 sv.setDocumentView(Some(&doc));
             }
             attach_to_parent(state, parent_id, &sv);
@@ -1000,10 +997,7 @@ fn create_node(
                 sv.setHasVerticalScroller(true);
                 sv.setAutohidesScrollers(true);
                 sv.setDrawsBackground(false);
-                let doc: Retained<NSView> = NSView::initWithFrame(
-                    mtm.alloc(),
-                    NSRect::new(NSPoint::new(0.0, 0.0), frame.size),
-                );
+                let doc = new_document_view(mtm, frame.size);
                 sv.setDocumentView(Some(&doc));
             }
             // Instantiate virtualization state (FR-002, FR-004).
@@ -1983,6 +1977,13 @@ fn create_node(
                     btn.setBordered(false);
                     btn.setTransparent(true);
                     btn.setTitle(&NSString::from_str(""));
+                    // Name the control for assistive technology. The row's text lives
+                    // in a sibling label, which VoiceOver will not associate with the
+                    // button on its own.
+                    let ax_label = NSString::from_str(&label_text);
+                    // Called through msg_send: the NSAccessibility protocol itself is
+                    // not re-exported at the crate root in objc2-app-kit 0.2.
+                    let _: () = msg_send![&*btn, setAccessibilityLabel: &*ax_label];
                     let obj: &AnyObject = &target;
                     btn.setTarget(Some(obj));
                     btn.setAction(Some(sel!(fire:)));
@@ -2637,7 +2638,20 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
             };
 
         // Flip y from taffy (top-left origin) to AppKit (bottom-left origin).
-        let flipped_y = superview_height - local_y - rect.height;
+        //
+        // Exception: content inside a scroll view lives in a flipped document view,
+        // which already has a top-left origin, so no inversion is applied there.
+        let parent_is_scroll = shadow_parent_id.is_some_and(|pid| {
+            matches!(
+                state.nodes.get(&pid),
+                Some(NativeHandle::ScrollViewWidget(_)) | Some(NativeHandle::FlatListWidget(..))
+            )
+        });
+        let flipped_y = if parent_is_scroll {
+            local_y
+        } else {
+            superview_height - local_y - rect.height
+        };
         let ns = NSRect::new(
             NSPoint::new(local_x as f64, flipped_y as f64),
             NSSize::new(rect.width as f64, rect.height as f64),
@@ -2755,6 +2769,44 @@ fn size_from_props(props: &Props, dw: f32, dh: f32) -> (f32, f32) {
 // ---------------------------------------------------------------------------
 // declare_class! trampolines
 // ---------------------------------------------------------------------------
+
+// A document view whose coordinate origin is top-left.
+//
+// AppKit views are bottom-left origin by default, so a tall document view opens
+// scrolled to its *bottom* — which is why a freshly shown list starts at the end.
+// Flipping the document removes that and, as a side effect, removes the need to
+// invert y for anything inside a scroll view.
+declare_class!(
+    struct FlippedView;
+
+    unsafe impl ClassType for FlippedView {                          
+        type Super = NSView;                                         
+        type Mutability = mutability::MainThreadOnly;                
+        const NAME: &'static str = "RnFlippedView";                  
+    }                                                                
+
+    impl DeclaredClass for FlippedView {
+        type Ivars = ();
+    }
+
+    unsafe impl FlippedView {                                        
+        #[method(isFlipped)]                                         
+        fn is_flipped(&self) -> bool {                               
+            true                                                     
+        }                                                            
+    }                                                                
+);                                                                   
+
+/// Create a flipped document view, the host for scrolled content.
+fn new_document_view(mtm: MainThreadMarker, size: NSSize) -> Retained<NSView> {
+    unsafe {
+        let view: Retained<FlippedView> = msg_send_id![
+            mtm.alloc::<FlippedView>(),
+            initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), size)
+        ];
+        Retained::cast(view)
+    }
+}
 
 #[derive(Debug)]
 struct TargetIvars {

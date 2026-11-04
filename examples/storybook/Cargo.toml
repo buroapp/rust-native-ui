@@ -1,0 +1,15 @@
+[package]
+name = "storybook"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+description = "Component catalog for Rust Native — every component kind, navigable"
+
+[dependencies]
+rn = { path = "../../rn" }
+env_logger = { workspace = true }
+
+[features]
+macos = ["rn/macos"]
+windows = ["rn/windows"]
+linux = ["rn/linux"]
