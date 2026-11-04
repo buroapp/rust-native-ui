@@ -30,7 +30,7 @@ use objc2_app_kit::{
     NSColor, NSColorWell, NSControlTextEditingDelegate, NSControlStateValueOff, NSControlStateValueOn,
     NSDatePicker, NSDatePickerStyle, NSImageView, NSLineBreakMode, NSPopUpButton, NSProgressIndicator,
     NSScrollView, NSSlider, NSTextField, NSTextFieldDelegate,
-    NSTextView, NSStepper, NSView, NSWindow, NSWindowDelegate, NSWindowStyleMask,
+    NSAlert, NSTextView, NSStepper, NSView, NSWindow, NSWindowDelegate, NSWindowStyleMask,
     NSBox, NSBoxType, NSDatePickerElementFlags, NSDatePickerMode, NSImage,
     NSLevelIndicator, NSLevelIndicatorStyle, NSSearchField,
     NSSegmentedControl, NSSwitch,
@@ -114,7 +114,7 @@ enum NativeHandle {
     ToolbarDividerWidget(Retained<NSBox>),
     ToolbarPopupWidget(Retained<NSPopUpButton>),
     AlertDialogWidget(Retained<NSView>),
-    SheetWidget(Retained<NSView>),
+    SheetWidget(Retained<NSView>, Retained<NSWindow>),
 }
 
 impl NativeHandle {
@@ -172,7 +172,7 @@ impl NativeHandle {
             NativeHandle::ToolbarDividerWidget(v) => Some(v),
             NativeHandle::ToolbarPopupWidget(v) => Some(v),
             NativeHandle::AlertDialogWidget(v) => Some(v),
-            NativeHandle::SheetWidget(v) => Some(v),
+            NativeHandle::SheetWidget(v, _) => Some(v),
         }
     }
 }
@@ -284,6 +284,8 @@ struct RendererState {
     /// The selected row we last scrolled into view. Interior mutability so the
     /// layout pass (which takes `&self`) can record it.
     last_ensured_selection: std::cell::Cell<Option<u64>>,
+    /// Sheets already presented, so a relayout cannot present the same sheet twice.
+    presented_sheets: std::cell::RefCell<std::collections::HashSet<NodeId>>,
 }
 
 impl RendererState {
@@ -296,6 +298,7 @@ impl RendererState {
             pending_events: Vec::new(),
             _tick_timer: None,
             last_ensured_selection: std::cell::Cell::new(None),
+            presented_sheets: std::cell::RefCell::new(std::collections::HashSet::new()),
         }
     }
 }
@@ -1625,12 +1628,9 @@ fn create_node(
         // AlertDialog — modal alert panel with title + message
         // ------------------------------------------------------------------
         ComponentKind::AlertDialog => {
-            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(300.0, 120.0));
-            let panel: Retained<NSView> = unsafe {
-                let v = NSView::initWithFrame(mtm.alloc(), frame);
-                v.setWantsLayer(true);
-                v
-            };
+            // A real NSAlert, presented on press. AppKit alerts are modal system
+            // objects, not views, so the component renders as the button that
+            // raises one rather than a painted imitation of a dialog.
             let title = match props.get(&PropKey::Title) {
                 Some(PropValue::String(s)) => s.clone(),
                 _ => String::new(),
@@ -1639,32 +1639,45 @@ fn create_node(
                 Some(PropValue::String(s)) => s.clone(),
                 _ => String::new(),
             };
-            unsafe {
-                let ttf: Retained<NSTextField> = NSTextField::initWithFrame(
-                    mtm.alloc(),
-                    NSRect::new(NSPoint::new(16.0, 84.0), NSSize::new(268.0, 20.0)),
-                );
-                ttf.setEditable(false);
-                ttf.setBordered(false);
-                ttf.setDrawsBackground(false);
-                ttf.setStringValue(&NSString::from_str(&title));
-                ttf.setFont(Some(&NSFont::boldSystemFontOfSize(13.0)));
-                panel.addSubview(&ttf);
+            let on_press = match props.get(&PropKey::OnPress) {
+                Some(PropValue::HandlerRef(h)) => Some(*h),
+                _ => None,
+            };
 
-                let mtf: Retained<NSTextField> = NSTextField::initWithFrame(
-                    mtm.alloc(),
-                    NSRect::new(NSPoint::new(16.0, 40.0), NSSize::new(268.0, 40.0)),
-                );
-                mtf.setEditable(false);
-                mtf.setBordered(false);
-                mtf.setDrawsBackground(false);
-                mtf.setStringValue(&NSString::from_str(&message));
-                mtf.setFont(Some(&NSFont::systemFontOfSize(12.0)));
-                mtf.setTextColor(Some(&NSColor::secondaryLabelColor()));
-                panel.addSubview(&mtf);
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(300.0, 32.0));
+            let btn: Retained<NSButton> = unsafe {
+                let b = NSButton::initWithFrame(mtm.alloc(), frame);
+                b.setBezelStyle(NSBezelStyle::Automatic);
+                b.setTitle(&NSString::from_str(&title));
+                b.setAction(Some(sel!(present:)));
+                b
+            };
+            // A modal needs a window to attach to; without one there is nothing to
+            // present on, so the button is simply disabled rather than dead.
+            match enclosing_window(state, parent_id) {
+                Some(window) => {
+                    let target = AlertTarget::new(
+                        mtm,
+                        AlertIvars {
+                            title: title.clone(),
+                            message,
+                            handler: on_press,
+                            source: node_id,
+                            window,
+                        },
+                    );
+                    unsafe {
+                        let obj: &AnyObject = &target;
+                        btn.setTarget(Some(obj));
+                    }
+                    stash_delegate(node_id, DelegateHandle::Alert(target));
+                }
+                None => btn.setEnabled(false),
             }
-            attach_to_parent(state, parent_id, &panel);
-            state.nodes.insert(node_id, NativeHandle::AlertDialogWidget(panel));
+
+            let btn_view: Retained<NSView> = unsafe { Retained::cast(btn) };
+            attach_to_parent(state, parent_id, &btn_view);
+            state.nodes.insert(node_id, NativeHandle::AlertDialogWidget(btn_view));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
@@ -1673,14 +1686,36 @@ fn create_node(
         // Sheet — window-attached modal container
         // ------------------------------------------------------------------
         ComponentKind::Sheet => {
-            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 300.0));
-            let panel: Retained<NSView> = unsafe {
-                let v = NSView::initWithFrame(mtm.alloc(), frame);
-                v.setWantsLayer(true);
-                v
+            // A real sheet: its own NSWindow, presented on the owner. Because the
+            // sheet has its own window, its container is that window's content view
+            // and children attach there instead of to the parent view.
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(420.0, 280.0));
+            let style = NSWindowStyleMask::Titled | NSWindowStyleMask::Closable;
+            let sheet_window: Retained<NSWindow> = unsafe {
+                NSWindow::initWithContentRect_styleMask_backing_defer(
+                    mtm.alloc(),
+                    frame,
+                    style,
+                    NSBackingStoreType::NSBackingStoreBuffered,
+                    false,
+                )
             };
-            attach_to_parent(state, parent_id, &panel);
-            state.nodes.insert(node_id, NativeHandle::SheetWidget(panel));
+            unsafe {
+                sheet_window.setReleasedWhenClosed(false);
+                if let Some(PropValue::String(title)) = props.get(&PropKey::Title) {
+                    sheet_window.setTitle(&NSString::from_str(title));
+                }
+            }
+
+            let content = sheet_window.contentView().unwrap_or_else(|| {
+                // A window always has a content view; synthesising one keeps the
+                // component usable rather than panicking if that ever changes.
+                let v: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
+                sheet_window.setContentView(Some(&v));
+                v
+            });
+
+            state.nodes.insert(node_id, NativeHandle::SheetWidget(content, sheet_window));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
@@ -2347,7 +2382,7 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
         Some(NativeHandle::ToolbarDividerWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::ToolbarPopupWidget(parent)) => unsafe { parent.addSubview(view) },
         Some(NativeHandle::AlertDialogWidget(parent)) => unsafe { parent.addSubview(view) },
-        Some(NativeHandle::SheetWidget(parent)) => unsafe { parent.addSubview(view) },
+        Some(NativeHandle::SheetWidget(parent, _)) => unsafe { parent.addSubview(view) },
         _ => {}
     }
 }
@@ -2462,8 +2497,11 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::ToolbarIconButton => (Some(32.0), Some(28.0)),
         ComponentKind::ToolbarDivider => (Some(1.0), Some(20.0)),
         ComponentKind::ToolbarPopup => (Some(120.0), Some(26.0)),
-        ComponentKind::AlertDialog => (Some(300.0), Some(120.0)),
-        ComponentKind::Sheet => (None, None),
+        // AlertDialog renders a trigger button, not a dialog panel.
+        ComponentKind::AlertDialog => (Some(300.0), Some(32.0)),
+        // A sheet is a separate window; give it a usable default size when the
+        // application does not set one.
+        ComponentKind::Sheet => (Some(420.0), Some(280.0)),
         ComponentKind::RadioGroup => {
             let options_count = shadow
                 .props
@@ -2686,6 +2724,41 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
     }
 
     ensure_selection_visible(state, result);
+    present_sheets(state, result);
+}
+
+/// Present any sheet that has been laid out but not yet shown.
+///
+/// Sheets are real windows, so they can only be presented once they have a size.
+/// Presentation is recorded so a relayout triggered by an unrelated event does not
+/// re-present a sheet the user already dismissed.
+fn present_sheets(state: &RendererState, result: &rn_layout::LayoutResult) {
+    for (id, handle) in &state.nodes {
+        let NativeHandle::SheetWidget(_, sheet_window) = handle else {
+            continue;
+        };
+        if state.presented_sheets.borrow().contains(id) {
+            continue;
+        }
+        let Some(rect) = result.rects.get(&rn_layout::LayoutNodeId(id.0)) else {
+            continue;
+        };
+        let Some(owner) = enclosing_window(state, state.shadow.get(id).and_then(|s| s.parent)) else {
+            continue;
+        };
+
+        unsafe {
+            sheet_window.setContentSize(NSSize::new(rect.width as f64, rect.height as f64));
+            owner.beginSheet_completionHandler(sheet_window, None);
+        }
+        log::debug!(
+            "presented sheet {:?}: {:.0}x{:.0}pt",
+            id,
+            rect.width,
+            rect.height
+        );
+        state.presented_sheets.borrow_mut().insert(*id);
+    }
 }
 
 /// Scroll a container so its selected row is on screen.
@@ -2764,6 +2837,20 @@ fn ensure_selection_visible(state: &RendererState, result: &rn_layout::LayoutRes
 // ---------------------------------------------------------------------------
 // Prop helpers
 // ---------------------------------------------------------------------------
+
+/// The window that owns a node, found by walking up the shadow tree.
+///
+/// Modal system objects (alerts, sheets) attach to a window rather than being a
+/// view inside one, so they need the enclosing window rather than a parent view.
+fn enclosing_window(state: &RendererState, start: Option<NodeId>) -> Option<Retained<NSWindow>> {
+    let mut node = start?;
+    loop {
+        if let Some(NativeHandle::Window(w)) = state.nodes.get(&node) {
+            return Some(w.clone());
+        }
+        node = state.shadow.get(&node).and_then(|s| s.parent)?;
+    }
+}
 
 fn bool_prop(props: &Props, key: PropKey, default: bool) -> bool {
     match props.get(&key) {
@@ -2901,6 +2988,85 @@ fn new_document_view(mtm: MainThreadMarker, size: NSSize) -> Retained<NSView> {
             initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), size)
         ];
         Retained::cast(view)
+    }
+}
+
+/// Presents a real `NSAlert` as a sheet on the window that owns the component.
+///
+/// An alert is a modal system object, not a view: it cannot be a child in the view
+/// tree. The component therefore renders as a native button that presents one, which
+/// is both honest about what AppKit offers and gives a real alert with real system
+/// buttons rather than a painted imitation of one.
+#[derive(Debug)]
+struct AlertIvars {
+    title: String,
+    message: String,
+    handler: Option<HandlerId>,
+    source: NodeId,
+    window: Retained<NSWindow>,
+}
+
+declare_class!(
+    struct AlertTarget;
+
+    unsafe impl ClassType for AlertTarget {
+        type Super = NSObject;
+        type Mutability = mutability::MainThreadOnly;
+        const NAME: &'static str = "RnAlertTarget";
+    }
+
+    impl DeclaredClass for AlertTarget {
+        type Ivars = AlertIvars;
+    }
+
+    unsafe impl AlertTarget {
+        #[method(present:)]
+        fn present(&self, _sender: Option<&AnyObject>) {
+            let ivars = self.ivars();
+            let Some(mtm) = MainThreadMarker::new() else {
+                return;
+            };
+            let alert = unsafe { NSAlert::new(mtm) };
+            unsafe {
+                alert.setMessageText(&NSString::from_str(&ivars.title));
+                alert.setInformativeText(&NSString::from_str(&ivars.message));
+                alert.addButtonWithTitle(&NSString::from_str("OK"));
+                alert.addButtonWithTitle(&NSString::from_str("Cancel"));
+            }
+
+            let source = ivars.source;
+            let handler = ivars.handler;
+            // The completion block is copied by AppKit, so a stack-scoped
+            // reference-counted block is enough.
+            let completion = block2::RcBlock::new(move |response: isize| {
+                if let Some(h) = handler {
+                    let event = Event {
+                        source,
+                        handler: h,
+                        kind: EventKind::Press,
+                        // 1000 = first button (OK), 1001 = second (Cancel).
+                        payload: EventPayload::Text(match response {
+                            1000 => "OK".to_string(),
+                            _ => "Cancel".to_string(),
+                        }),
+                        stop_bubbling: false,
+                    };
+                    with_state(|s| s.pending_events.push(event.clone()));
+                    rn_core::dispatch_event(event);
+                }
+            });
+
+            unsafe {
+                alert.beginSheetModalForWindow_completionHandler(&ivars.window, Some(&completion));
+            }
+        }
+    }
+);
+
+impl AlertTarget {
+    fn new(mtm: MainThreadMarker, ivars: AlertIvars) -> Retained<Self> {
+        let this = mtm.alloc().set_ivars(ivars);
+        unsafe { msg_send_id![super(this), init] }
     }
 }
 
@@ -3191,6 +3357,7 @@ enum DelegateHandle {
     Window(Retained<WindowDelegate>),
     Text(Retained<TextDelegate>),
     Tick(Retained<TickTarget>),
+    Alert(Retained<AlertTarget>),
 }
 
 thread_local! {

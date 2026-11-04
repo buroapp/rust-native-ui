@@ -698,7 +698,9 @@ pub fn alert_dialog(title: impl Into<String>, message: impl Into<String>) -> Com
 
 /// Start building a `Sheet` — window-attached modal sheet (macos_ui `MacosSheet`).
 pub fn sheet() -> ComponentBuilder {
-    ComponentBuilder::new(ComponentKind::Sheet).flex(1.0)
+    // No flex: a sheet is its own window sized to its content, not a participant
+    // in the parent's flex layout. Growing here collapsed it to a sliver.
+    ComponentBuilder::new(ComponentKind::Sheet)
 }
 
 /// Start building a `Toolbar` component.
