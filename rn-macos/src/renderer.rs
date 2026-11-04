@@ -48,6 +48,7 @@ use objc2_foundation::{
 };
 
 use rn_core::{
+    RadiusToken,
     ApplyBridge, Axis, Changeset, ColorValue, ComponentKind, Event, EventKind, EventPayload,
     HandlerId, NodeId, Operation, PlatformRenderer, PropKey, PropValue, Props, RenderError,
     ScrollEvent,
@@ -1122,7 +1123,7 @@ fn create_node(
                 t.setBordered(false);
                 t.setDrawsBackground(false);
                 t.setStringValue(&NSString::from_str(&title_text));
-                t.setFont(Some(&NSFont::systemFontOfSize(13.0)));
+                t.setFont(Some(&NSFont::systemFontOfSize(NSFont::systemFontSize())));
                 t.setTextColor(Some(&NSColor::labelColor()));
                 t.setLineBreakMode(NSLineBreakMode(4));
                 t
@@ -1143,7 +1144,7 @@ fn create_node(
                     t.setBordered(false);
                     t.setDrawsBackground(false);
                     t.setStringValue(&NSString::from_str(sub));
-                    t.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+                    t.setFont(Some(&NSFont::systemFontOfSize(NSFont::smallSystemFontSize())));
                     t.setTextColor(Some(&NSColor::secondaryLabelColor()));
                     t.setLineBreakMode(NSLineBreakMode(4));
                     t
@@ -1223,7 +1224,7 @@ fn create_node(
                     t.setDrawsBackground(false);
                     t.setAlignment(objc2_app_kit::NSTextAlignment::Center);
                     t.setStringValue(&NSString::from_str(title));
-                    t.setFont(Some(&NSFont::boldSystemFontOfSize(13.0)));
+                    t.setFont(Some(&NSFont::boldSystemFontOfSize(NSFont::systemFontSize())));
                     t.setTextColor(Some(&NSColor::secondaryLabelColor()));
                     t
                 };
@@ -1461,7 +1462,7 @@ fn create_node(
                 t.setBordered(false);
                 t.setDrawsBackground(false);
                 t.setStringValue(&NSString::from_str(&text));
-                t.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+                t.setFont(Some(&NSFont::systemFontOfSize(NSFont::smallSystemFontSize())));
                 t.setTextColor(Some(&NSColor::secondaryLabelColor()));
                 t
             };
@@ -1710,7 +1711,7 @@ fn create_node(
                 t.setBordered(false);
                 t.setDrawsBackground(false);
                 t.setStringValue(&NSString::from_str(&title.to_uppercase()));
-                t.setFont(Some(&NSFont::boldSystemFontOfSize(11.0)));
+                t.setFont(Some(&NSFont::boldSystemFontOfSize(NSFont::smallSystemFontSize())));
                 t.setTextColor(Some(&NSColor::secondaryLabelColor()));
                 t.setLineBreakMode(NSLineBreakMode(4));
                 t
@@ -1888,7 +1889,7 @@ fn create_node(
             unsafe {
                 card.setBoxType(NSBoxType::NSBoxCustom);
                 card.setContentViewMargins(NSSize::new(0.0, 0.0));
-                card.setCornerRadius(8.0);
+                card.setCornerRadius(RadiusToken::Xl.px() as f64);
                 card.setBorderWidth(1.0);
                 card.setBorderColor(&NSColor::separatorColor());
                 card.setFillColor(&NSColor::controlBackgroundColor());
@@ -2036,7 +2037,7 @@ fn create_node(
             let row: Retained<NSBox> = unsafe {
                 let b = NSBox::initWithFrame(mtm.alloc(), frame);
                 b.setBoxType(NSBoxType::NSBoxCustom);
-                b.setCornerRadius(6.0);
+                b.setCornerRadius(RadiusToken::Lg.px() as f64);
                 b.setBorderWidth(0.0);
                 if selected {
                     b.setFillColor(&NSColor::controlAccentColor());
@@ -2131,7 +2132,7 @@ fn create_node(
                 gb.setFillColor(&NSColor::controlBackgroundColor());
                 gb.setBorderColor(&NSColor::separatorColor());
                 gb.setBorderWidth(1.0);
-                gb.setCornerRadius(8.0);
+                gb.setCornerRadius(RadiusToken::Xl.px() as f64);
             }
             if let Some(PropValue::String(title)) = props.get(&PropKey::SectionTitle) {
                 unsafe { gb.setTitle(&NSString::from_str(title)) };
@@ -2336,12 +2337,12 @@ fn update_node(
                     if selected {
                         (
                             NSColor::whiteColor(),
-                            NSFont::boldSystemFontOfSize(13.0),
+                            NSFont::boldSystemFontOfSize(NSFont::systemFontSize()),
                         )
                     } else {
                         (
                             NSColor::labelColor(),
-                            NSFont::systemFontOfSize(13.0),
+                            NSFont::systemFontOfSize(NSFont::systemFontSize()),
                         )
                     }
                 };
@@ -2949,7 +2950,10 @@ fn build_attributed_string(spans: &[rn_core::StyledSpan], mtm: MainThreadMarker)
         let range = objc2_foundation::NSRange::new(offset, span_len);
         // Font — handle bold, italic, bold+italic (FR-008)
         let font: Retained<NSFont> = unsafe {
-            let size: f64 = span.font_size.unwrap_or(13.0) as f64;
+            let size: f64 = match span.font_size {
+                Some(s) => s as f64,
+                None => NSFont::systemFontSize(),
+            };
             let base: Retained<NSFont> = if span.bold {
                 NSFont::boldSystemFontOfSize(size)
             } else {
