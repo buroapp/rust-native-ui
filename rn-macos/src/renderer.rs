@@ -2516,6 +2516,18 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
     let padding = f32_prop(&shadow.props, PropKey::Padding, 0.0);
     let gap = f32_prop(&shadow.props, PropKey::Gap, 0.0);
     let min_height = f32_opt(&shadow.props, PropKey::MinHeight);
+    // Scrollable containers get `min-height: 0`. Without it flex layout applies its
+    // automatic minimum, which is the content height — so a scroll view refuses to
+    // shrink into its parent and overflows it instead (a 2010pt list inside a 720pt
+    // sidebar). Same reason CSS sets `min-height: 0` on scroll containers.
+    let min_height = if matches!(
+        shadow.kind,
+        ComponentKind::ScrollView | ComponentKind::FlatList | ComponentKind::ContentArea
+    ) {
+        Some(min_height.unwrap_or(0.0))
+    } else {
+        min_height
+    };
     let (fixed_width, fixed_height) = match shadow.kind {
         ComponentKind::Label => (None, Some(20.0)),
         ComponentKind::Button => (Some(120.0), Some(32.0)),
@@ -2573,8 +2585,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::PopupButton => (Some(160.0), Some(26.0)),
         ComponentKind::BackButton => (Some(32.0), Some(28.0)),
         ComponentKind::RichText => (None, Some(80.0)),
-        ComponentKind::FlatList => (None, Some(300.0)),
-        ComponentKind::ScrollView => (None, Some(200.0)),
+        ComponentKind::FlatList => (None, None),
         // Phase-2 containers — fill from props, fall back to flex/grow
         ComponentKind::Sidebar => {
             // Use SidebarWidth if present, else Width prop
@@ -2590,6 +2601,11 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
             f32_opt(&shadow.props, PropKey::Height),
         ),
     };
+    // An explicit size prop always beats the intrinsic default. Without this the
+    // table above silently won and a caller could not resize, say, a ScrollView.
+    let fixed_width = f32_opt(&shadow.props, PropKey::Width).or(fixed_width);
+    let fixed_height = f32_opt(&shadow.props, PropKey::Height).or(fixed_height);
+
     // Labels with no explicit width use a minimum of 60px so they don't
     // collapse to zero in hstack layouts where other fixed-width siblings
     // compete for space.

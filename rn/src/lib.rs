@@ -411,7 +411,9 @@ pub fn drain_updates() -> Vec<UpdateMessage> {
 
 /// Start building a `ScrollView` component.
 pub fn scroll_view() -> ComponentBuilder {
-    ComponentBuilder::new(ComponentKind::ScrollView)
+    // Fills its container by default: a scroll view with no size of its own has
+    // nothing else to derive a height from.
+    ComponentBuilder::new(ComponentKind::ScrollView).flex(1.0)
 }
 
 /// Start building a `FlatList` component.

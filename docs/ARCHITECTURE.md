@@ -83,6 +83,15 @@ Two further rules follow from the coordinate systems:
 `ContentArea` is a scroll container for the same reason: it is a window's main
 surface, so content taller than the pane has to stay reachable.
 
+Two sizing rules that are easy to get wrong:
+
+- **An explicit `Width`/`Height` prop beats the intrinsic default.** The per-kind
+  table is a fallback for callers that said nothing, not a hard override.
+- **Scroll containers get `min-height: 0`.** Flex layout's automatic minimum is the
+  content height, so without it a scroll view refuses to shrink into its parent and
+  overflows it — a 2010pt list inside a 720pt sidebar. CSS sets `min-height: 0` on
+  scroll containers for the same reason.
+
 One deliberate exception: **`TabView` pages are not flex children.** `NSTabView`
 sizes the page it shows, so handing pages to taffy would compute a second,
 competing rect for each one. Build spec emits no children for a `TabView`, pages
