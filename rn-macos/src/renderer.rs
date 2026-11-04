@@ -2649,7 +2649,11 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
             // A wrapped label needs height for every line it may occupy.
             let lines = f32_prop(&shadow.props, PropKey::MaxLines, 1.0).max(1.0);
             let wrap = bool_prop(&shadow.props, PropKey::TextWrap, false);
-            let rows = if wrap { lines } else { 1.0 };
+            // `lines` counts on its own: asking for 2 lines is asking to wrap,
+            // even when TextWrap was never set. Only counting `wrap` here is why
+            // the second line was clipped — the text wrapped into 40pt of space
+            // that the box never allocated.
+            let rows = if wrap || lines > 1.0 { lines } else { 1.0 };
             (None, Some(20.0 * rows))
         }
         ComponentKind::Button => (Some(120.0), Some(32.0)),
