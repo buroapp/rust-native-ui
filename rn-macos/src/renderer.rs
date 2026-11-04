@@ -33,7 +33,7 @@ use objc2_app_kit::{
     NSTextView, NSStepper, NSView, NSWindow, NSWindowDelegate, NSWindowStyleMask,
     NSBox, NSBoxType, NSDatePickerElementFlags, NSDatePickerMode, NSImage,
     NSLevelIndicator, NSLevelIndicatorStyle, NSSearchField,
-    NSSegmentedControl, NSSwitch, NSSplitView,
+    NSSegmentedControl, NSSwitch,
     NSTitlePosition, NSVisualEffectView, NSVisualEffectMaterial,
     NSVisualEffectState,
 };
@@ -87,7 +87,7 @@ enum NativeHandle {
     SearchBarWidget(Retained<NSSearchField>),
     SidebarWidget(Retained<NSView>),
     GroupedSectionWidget(Retained<NSBox>),
-    SplitViewWidget(Retained<NSSplitView>),
+    SplitViewWidget(Retained<NSView>),
     ToolbarWidget(Retained<NSView>),
     RichTextWidget(Retained<NSTextView>),
     TouchableWidget(Retained<NSView>),
@@ -974,6 +974,14 @@ fn create_node(
                 // via NotificationCenter in a future delegate implementation.
                 let clip = sv.contentView();
                 clip.setPostsBoundsChangedNotifications(true);
+                // Children of a scroll view are placed in a document view, not on
+                // the scroll view itself — subviews of NSScrollView are clipped
+                // away because they are not part of the scrolled document.
+                let doc: Retained<NSView> = NSView::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(NSPoint::new(0.0, 0.0), frame.size),
+                );
+                sv.setDocumentView(Some(&doc));
             }
             attach_to_parent(state, parent_id, &sv);
             state.nodes.insert(node_id, NativeHandle::ScrollViewWidget(sv));
@@ -992,6 +1000,11 @@ fn create_node(
                 sv.setHasVerticalScroller(true);
                 sv.setAutohidesScrollers(true);
                 sv.setDrawsBackground(false);
+                let doc: Retained<NSView> = NSView::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(NSPoint::new(0.0, 0.0), frame.size),
+                );
+                sv.setDocumentView(Some(&doc));
             }
             // Instantiate virtualization state (FR-002, FR-004).
             let item_h = f32_prop(&props, PropKey::ItemHeightFixed, 44.0);
@@ -2020,17 +2033,24 @@ fn create_node(
         }
 
         // ------------------------------------------------------------------
-        // SplitView — NSSplitView with resizable panes (FR-028)
+        // SplitView — panes laid out by taffy, not by an NSSplitView
+        //
+        // An NSSplitView arranges its own arranged subviews, which duplicates
+        // layout authority: taffy computes pane rects and AppKit computes
+        // different ones, and the children of each pane end up positioned
+        // against a frame that never matches. Constitution VI makes the layout
+        // result the sole source of geometry, so this is a plain container and
+        // taffy positions every pane.
+        //
+        // Draggable dividers are a separate concern: they adjust the split
+        // ratios in the application tree, which re-runs layout. That keeps one
+        // authority instead of two.
         // ------------------------------------------------------------------
         ComponentKind::SplitView => {
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(600.0, 400.0));
-            let sv: Retained<NSSplitView> = unsafe {
-                let s = NSSplitView::initWithFrame(mtm.alloc(), frame);
-                s.setVertical(true);
-                s
-            };
-            attach_to_parent(state, parent_id, &sv);
-            state.nodes.insert(node_id, NativeHandle::SplitViewWidget(sv));
+            let view: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
+            attach_to_parent(state, parent_id, &view);
+            state.nodes.insert(node_id, NativeHandle::SplitViewWidget(view));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
@@ -2273,8 +2293,17 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
         }
         Some(NativeHandle::View(parent, _)) => unsafe { parent.addSubview(view) },
         // NSSplitView requires addArrangedSubview to participate in split layout
-        Some(NativeHandle::SplitViewWidget(sv)) => unsafe { sv.addArrangedSubview(view) },
+        Some(NativeHandle::SplitViewWidget(parent)) => unsafe { parent.addSubview(view) },
         // Generic NSView-backed Phase-2 containers — plain addSubview
+        // Children of a scroll view belong to its document view.
+        Some(NativeHandle::ScrollViewWidget(sv)) => {
+            if let Some(doc) = unsafe { sv.documentView() } { unsafe { doc.addSubview(view) } }
+            else { unsafe { sv.addSubview(view) } }
+        }
+        Some(NativeHandle::FlatListWidget(sv, _)) => {
+            if let Some(doc) = unsafe { sv.documentView() } { unsafe { doc.addSubview(view) } }
+            else { unsafe { sv.addSubview(view) } }
+        }
         Some(NativeHandle::SidebarWidget(parent)) => unsafe { parent.addSubview(view) },
         // NSBox containers: children go into contentView so they appear inside the box
         Some(NativeHandle::GroupedSectionWidget(parent)) => unsafe {
@@ -2483,7 +2512,20 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
 
     // flex_grow comes directly from the FlexGrow prop — no per-kind guessing.
     // Callers set .flex(1.0) when they want fill-behavior.
-    let flex_grow = f32_prop(&shadow.props, PropKey::FlexGrow, 0.0);
+    //
+    // One structural exception: panes of a SplitView share the available space
+    // equally unless they declare a fixed width. That is what a split view *is*,
+    // not a layout guess — a split view whose panes all collapse to zero is not
+    // a split view.
+    let parent_is_splitview = shadow
+        .parent
+        .and_then(|p| state.shadow.get(&p))
+        .is_some_and(|ps| matches!(ps.kind, ComponentKind::SplitView));
+    let flex_grow = if parent_is_splitview && fixed_width.is_none() {
+        1.0
+    } else {
+        f32_prop(&shadow.props, PropKey::FlexGrow, 0.0)
+    };
     let justify = f32_prop(&shadow.props, PropKey::Justify, 0.0) as u8;
     Some(LayoutSpec {
         id: LayoutNodeId(node_id.0),
@@ -2502,6 +2544,58 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
 
 fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout::LayoutResult) {
     let content_height = content_view.frame().size.height as f32;
+
+    // Pre-pass: a scroll view's children live in its document view, which must be
+    // tall enough to hold them. Compute that from the children's own rects, then
+    // size the document view. Without this, children positioned below the
+    // viewport's own height land outside the document and vanish.
+    let mut doc_heights: Vec<(NodeId, f32)> = Vec::new();
+    for (lid, parent_rect) in &result.rects {
+        let node_id = NodeId(lid.0);
+        let is_scroll = matches!(
+            state.nodes.get(&node_id),
+            Some(NativeHandle::ScrollViewWidget(_)) | Some(NativeHandle::FlatListWidget(..))
+        );
+        if !is_scroll {
+            continue;
+        }
+        let mut max_bottom: f32 = parent_rect.height;
+        if let Some(sn) = state.shadow.get(&node_id) {
+            for child in &sn.children {
+                if let Some(cr) = result.rects.get(&rn_layout::LayoutNodeId(child.0)) {
+                    let local_bottom = (cr.y - parent_rect.y) + cr.height;
+                    if local_bottom > max_bottom {
+                        max_bottom = local_bottom;
+                    }
+                }
+            }
+        }
+        doc_heights.push((node_id, max_bottom));
+    }
+
+    for (node_id, h) in &doc_heights {
+        let Some(handle) = state.nodes.get(node_id) else {
+            continue;
+        };
+        let sv = match handle {
+            NativeHandle::ScrollViewWidget(sv) => sv,
+            NativeHandle::FlatListWidget(sv, _) => sv,
+            _ => continue,
+        };
+        let width = result
+            .rects
+            .get(&rn_layout::LayoutNodeId(node_id.0))
+            .map_or(0.0, |r| r.width);
+        if let Some(doc) = unsafe { sv.documentView() } {
+            unsafe {
+                doc.setFrame(NSRect::new(
+                    NSPoint::new(0.0, 0.0),
+                    NSSize::new(width as f64, *h as f64),
+                ))
+            };
+        }
+    }
+
     for (lid, rect) in &result.rects {
         let node_id = NodeId(lid.0);
         let Some(handle) = state.nodes.get(&node_id) else {
@@ -2523,23 +2617,24 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
                     // Parent has a taffy rect → coords are relative to parent.
                     let lx = rect.x - parent_rect.x;
                     let ly = rect.y - parent_rect.y;
-                    (lx, ly, parent_rect.height)
+                    // Inside a scroll view the superview is the document view, whose
+                    // height is the content height, not the viewport height. Flipping
+                    // against the viewport would place content off the document.
+                    let h = shadow_parent_id
+                        .and_then(|pid| {
+                            doc_heights
+                                .iter()
+                                .find(|(nid, _)| *nid == pid)
+                                .map(|(_, h)| *h)
+                        })
+                        .unwrap_or(parent_rect.height);
+                    (lx, ly, h)
                 }
                 None => {
                     // No parent rect (direct content-view child or window child).
                     (rect.x, rect.y, content_height)
                 }
             };
-
-        // Skip direct children of NSSplitView — NSSplitView manages pane frames internally
-        // via addArrangedSubview. Applying our frames would collapse them to zero.
-        let is_splitview_child = shadow_parent_id
-            .and_then(|pid| state.nodes.get(&pid))
-            .map(|h| matches!(h, NativeHandle::SplitViewWidget(_)))
-            .unwrap_or(false);
-        if is_splitview_child {
-            continue;
-        }
 
         // Flip y from taffy (top-left origin) to AppKit (bottom-left origin).
         let flipped_y = superview_height - local_y - rect.height;
@@ -2553,20 +2648,6 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
             rect.x, rect.y, shadow_parent_id
         );
         unsafe { view.setFrame(ns) };
-
-        // After sizing a NSSplitView, distribute panes equally by setting divider positions.
-        if let Some(NativeHandle::SplitViewWidget(sv)) = state.nodes.get(&node_id) {
-            let pane_count = state.shadow.get(&node_id)
-                .map(|s| s.children.len())
-                .unwrap_or(0);
-            if pane_count > 1 {
-                let step = rect.width / pane_count as f32;
-                for i in 0..(pane_count - 1) {
-                    let pos = step * (i as f32 + 1.0);
-                    unsafe { sv.setPosition_ofDividerAtIndex(pos as f64, i as isize) };
-                }
-            }
-        }
     }
 }
 
