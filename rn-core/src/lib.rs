@@ -209,6 +209,8 @@ pub enum PropKey {
     OnClose,
     /// Render with the modern full-size-content window look.
     ModernLook,
+    /// Cross-axis alignment of a container's children.
+    Align,
     // Numeric range & value
     Value,
     Min,

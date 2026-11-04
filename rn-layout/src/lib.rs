@@ -55,6 +55,8 @@ pub struct LayoutSpec {
     /// Main-axis alignment: 0=start, 1=end, 2=center, 3=space-between,
     /// 4=space-around, 5=space-evenly.
     pub justify: u8,
+    /// Cross-axis alignment: 0=stretch (default), 1=start, 2=center, 3=end.
+    pub align: u8,
     pub children: Vec<LayoutSpec>,
 }
 
@@ -117,7 +119,12 @@ pub fn compute_layout(spec: &LayoutSpec, container: Rect) -> LayoutResult {
                 5 => JustifyContent::SpaceEvenly,
                 _ => JustifyContent::Start,
             }),
-            align_items: Some(AlignItems::Stretch),
+            align_items: Some(match spec.align {
+                1 => AlignItems::Start,
+                2 => AlignItems::Center,
+                3 => AlignItems::End,
+                _ => AlignItems::Stretch,
+            }),
             padding: Rect {
                 left: length(spec.padding),
                 right: length(spec.padding),

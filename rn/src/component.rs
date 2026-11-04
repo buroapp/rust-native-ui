@@ -113,6 +113,16 @@ impl ComponentBuilder {
     }
 
     /// Align children to the end of the main axis.
+    /// Centre children on the cross axis.
+    pub fn align_center(self) -> Self {
+        self.prop(PropKey::Align, PropValue::F32(2.0))
+    }
+
+    /// Align children to the start of the cross axis.
+    pub fn align_start(self) -> Self {
+        self.prop(PropKey::Align, PropValue::F32(1.0))
+    }
+
     pub fn justify_end(self) -> Self {
         self.prop(PropKey::Justify, PropValue::F32(1.0))
     }

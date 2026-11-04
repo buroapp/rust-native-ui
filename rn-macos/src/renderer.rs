@@ -794,7 +794,11 @@ fn create_node(
         ComponentKind::Image => {
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(32.0, 32.0));
             let image_view: Retained<NSImageView> = unsafe {
-                NSImageView::initWithFrame(mtm.alloc(), frame)
+                let v = NSImageView::initWithFrame(mtm.alloc(), frame);
+                // Without this the image draws at its natural size inside whatever
+                // frame layout gives it, so a 16pt symbol in a 64pt cell stays 16pt.
+                v.setImageScaling(objc2_app_kit::NSImageScaling::NSImageScaleProportionallyUpOrDown);
+                v
             };
             if let Some(PropValue::String(name)) = props.get(&PropKey::ImageName) {
                 let ns_name = NSString::from_str(name);
@@ -2732,6 +2736,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         f32_prop(&shadow.props, PropKey::FlexGrow, 0.0)
     };
     let justify = f32_prop(&shadow.props, PropKey::Justify, 0.0) as u8;
+    let align = f32_prop(&shadow.props, PropKey::Align, 0.0) as u8;
     Some(LayoutSpec {
         id: LayoutNodeId(node_id.0),
         axis,
@@ -2743,6 +2748,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         fixed_height,
         flex_grow,
         justify,
+        align,
         children,
     })
 }

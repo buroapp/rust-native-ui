@@ -33,6 +33,7 @@ fn node(
         fixed_height: h,
         flex_grow: grow,
         justify: 0,
+        align: 0,
         children,
     }
 }
