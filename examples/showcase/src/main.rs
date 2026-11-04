@@ -171,6 +171,8 @@ fn main() -> Result<(), rn::RnError> {
                     .size(480.0, 680.0)
                     .on_close(close_id)
                     .child(
+                        rn::scroll_view()
+                            .child(
                         rn::vstack()
                             .padding(16.0)
                             .gap(10.0)
@@ -364,6 +366,8 @@ fn main() -> Result<(), rn::RnError> {
                             .child(rn::separator())
                             // ── Status bar ──────────────────────────────────
                             .child(rn::label(format!("Status: {}", s.status)))
+                            .build()
+                            )
                             .build(),
                     )
                     .build(),
