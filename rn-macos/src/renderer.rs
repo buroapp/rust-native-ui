@@ -38,6 +38,7 @@ use objc2_app_kit::{
     NSSegmentedControl, NSSwitch,
     NSTitlePosition, NSVisualEffectView, NSVisualEffectMaterial,
     NSVisualEffectState,
+    NSSplitViewController, NSSplitViewItem, NSViewController,
 };
 // Phase 2 extra imports for RichText attributed string rendering (FR-008)
 use objc2_app_kit::{NSFont, NSFontManager, NSForegroundColorAttributeName, NSFontAttributeName};
@@ -282,6 +283,9 @@ impl ShadowNode {
     }
 }
 
+/// Panes a split-hosted window owns: each pane's node id and its AppKit view.
+type SplitPanes = Vec<(NodeId, Retained<NSView>)>;
+
 struct RendererState {
     mtm: MainThreadMarker,
     nodes: HashMap<NodeId, NativeHandle>,
@@ -291,6 +295,11 @@ struct RendererState {
     _tick_timer: Option<Retained<NSTimer>>,
     /// Sheets already presented, so a relayout cannot present the same sheet twice.
     presented_sheets: std::cell::RefCell<std::collections::HashSet<NodeId>>,
+    /// A window whose root is a SplitView with a leading Sidebar is hosted by an
+    /// NSSplitViewController rather than laid out into one content view. This maps
+    /// each such window to the pane views it owns, keyed by the pane's node id, so
+    /// relayout can run taffy inside each pane independently.
+    split_panes: HashMap<NodeId, SplitPanes>,
 }
 
 impl RendererState {
@@ -303,6 +312,7 @@ impl RendererState {
             pending_events: Vec::new(),
             _tick_timer: None,
             presented_sheets: std::cell::RefCell::new(std::collections::HashSet::new()),
+            split_panes: HashMap::new(),
         }
     }
 }
@@ -453,9 +463,15 @@ impl PlatformRenderer for MacosRenderer {
         // `makeKeyAndOrderFront` was called during `render()` before the event
         // loop started, so `windowDidBecomeKey:` never fires as a transition;
         // the contentView frame is now valid so we relayout everything here.
+        // Promote split windows, then lay out. Promotion calls
+        // `setContentViewController`, which makes AppKit lay the window out
+        // synchronously and re-enter our state; so it must run WITHOUT a borrow held.
         {
+            let roots: Vec<NodeId> = self.state.borrow().windows.clone();
+            for root in &roots {
+                promote_split_window(&self.state, *root);
+            }
             let s = self.state.borrow();
-            let roots: Vec<NodeId> = s.windows.clone();
             for root in roots {
                 relayout_window(&s, root);
             }
@@ -2551,7 +2567,145 @@ fn attach_to_parent(state: &RendererState, parent_id: Option<NodeId>, view: &NSV
 // Layout
 // ---------------------------------------------------------------------------
 
+/// Host a window's SplitView root in an `NSSplitViewController`.
+///
+/// This is the only way a sidebar reaches the top of the window. An `NSToolbar`
+/// paints its background across the full window width, so a sidebar laid into a
+/// plain content view is always covered at the top by the toolbar band. A
+/// split-view *sidebar item* is drawn by AppKit above that band and gets the
+/// vibrancy, the full height, and the draggable divider for free.
+///
+/// Detection is deliberately narrow: the window's single root child must be a
+/// `SplitView` whose first child is a `Sidebar`. Any other shape is left to the
+/// plain content-view path, so this cannot regress windows that do not opt in.
+///
+/// Each pane keeps its own `NSView`; taffy still lays out the pane's interior. The
+/// controller owns only the geometry *between* panes (widths, the divider), which
+/// is exactly the AppKit-owns-chrome / taffy-owns-interior split the constitution
+/// calls for.
+fn promote_split_window(state_cell: &Rc<RefCell<RendererState>>, window_id: NodeId) {
+    // Resolve everything we need under a short borrow, then DROP it: the AppKit
+    // calls below (`setContentViewController` especially) lay the window out
+    // synchronously and re-enter our state through the window delegate. Holding a
+    // borrow across them panics with "already borrowed".
+    let (mtm, window, pane_views): (MainThreadMarker, Retained<NSWindow>, SplitPanes) = {
+        let state = state_cell.borrow();
+        let mtm = state.mtm;
+        let Some(NativeHandle::Window(window)) = state.nodes.get(&window_id) else {
+            return;
+        };
+        let Some(window_shadow) = state.shadow.get(&window_id) else {
+            return;
+        };
+        let Some(&split_id) = window_shadow.children.first() else {
+            return;
+        };
+        let Some(split_shadow) = state.shadow.get(&split_id) else {
+            return;
+        };
+        // A split-hosted window is one whose root is a SplitView, or simply an
+        // horizontal stack, whose first child is a Sidebar. Both express the same
+        // intent — a sidebar beside content — so both get the real split controller.
+        let root_is_splittable = matches!(
+            split_shadow.kind,
+            ComponentKind::SplitView | ComponentKind::LayoutContainer(Axis::Horizontal)
+        );
+        if !root_is_splittable {
+            return;
+        }
+        let pane_ids = split_shadow.children.clone();
+        let first_is_sidebar = pane_ids.first().is_some_and(|p| {
+            state
+                .shadow
+                .get(p)
+                .is_some_and(|s| s.kind == ComponentKind::Sidebar)
+        });
+        if !first_is_sidebar || pane_ids.len() < 2 {
+            return;
+        }
+        let mut pane_views = Vec::new();
+        for pane_id in &pane_ids {
+            // A manual Separator between sidebar and content is redundant once the
+            // split controller draws its own divider; skip it so it does not become a
+            // 1pt resizable pane of its own.
+            if state
+                .shadow
+                .get(pane_id)
+                .is_some_and(|s| s.kind == ComponentKind::Separator)
+            {
+                continue;
+            }
+            if let Some(v) = state.nodes.get(pane_id).and_then(|h| h.as_view()).map(|v| v.retain()) {
+                pane_views.push((*pane_id, v));
+            }
+        }
+        (mtm, window.clone(), pane_views)
+    };
+
+    // No borrow held from here on.
+    let split_controller = unsafe { NSSplitViewController::new(mtm) };
+    let mut recorded: Vec<(NodeId, Retained<NSView>)> = Vec::new();
+
+    for (idx, (pane_id, pane_view)) in pane_views.into_iter().enumerate() {
+        unsafe { pane_view.removeFromSuperview() };
+        let vc = unsafe { NSViewController::new(mtm) };
+        unsafe { vc.setView(&pane_view) };
+
+        let is_sidebar = idx == 0;
+        let item = unsafe {
+            if is_sidebar {
+                NSSplitViewItem::sidebarWithViewController(&vc)
+            } else {
+                NSSplitViewItem::splitViewItemWithViewController(&vc)
+            }
+        };
+        if is_sidebar {
+            unsafe {
+                item.setMinimumThickness(180.0);
+                item.setMaximumThickness(320.0);
+                item.setCanCollapse(true);
+            }
+        }
+        unsafe { split_controller.addSplitViewItem(&item) };
+        recorded.push((pane_id, pane_view));
+    }
+
+    unsafe { window.setContentViewController(Some(&split_controller)) };
+
+    // Re-borrow only now, to record the panes.
+    state_cell.borrow_mut().split_panes.insert(window_id, recorded);
+    log::debug!(
+        "promote_split_window: {:?} hosted in NSSplitViewController",
+        window_id
+    );
+}
+
 fn relayout_window(state: &RendererState, window_id: NodeId) {
+    // A split-hosted window has no single content view to lay into; each pane is an
+    // independent NSView owned by the split controller. Run taffy inside each pane.
+    if let Some(panes) = state.split_panes.get(&window_id) {
+        for (pane_id, pane_view) in panes {
+            let frame = pane_view.frame();
+            // A split-view pane (the sidebar especially) runs under the titlebar, so
+            // its safe-area top inset is the band to keep rows clear of. AppKit
+            // reports it per pane; the sidebar's includes the traffic lights.
+            let top = unsafe { pane_view.safeAreaInsets() }.top as f32;
+            let pane_rect = Rect {
+                x: 0.0,
+                y: top,
+                width: frame.size.width as f32,
+                height: (frame.size.height as f32 - top).max(0.0),
+            };
+            let Some(spec) = build_spec(state, *pane_id) else {
+                continue;
+            };
+            let result = compute_layout(&spec, pane_rect);
+            apply_rects(state, pane_view, &result);
+        }
+        ensure_selection_visible(state);
+        return;
+    }
+
     let (content_rect, content_view) = {
         let Some(NativeHandle::Window(window)) = state.nodes.get(&window_id) else {
             log::warn!("relayout_window: no Window handle for {:?}", window_id);
@@ -2823,7 +2977,6 @@ fn titlebar_inset(content_view: &NSView) -> f32 {
     let full = content_view.frame().size.height;
     let usable = unsafe { window.contentLayoutRect() }.size.height;
     let inset = full - usable;
-    log::debug!("titlebar_inset: content {:.0} usable {:.0} -> {:.0}", full, usable, inset);
     if inset > 0.0 {
         inset as f32
     } else {
@@ -2959,12 +3112,6 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
             .shadow
             .get(&node_id)
             .is_some_and(|s| s.kind == ComponentKind::Sidebar);
-        if is_sidebar {
-            log::debug!(
-                "sidebar {:?}: inset {:.0} local_y {:.0} h {:.0}",
-                node_id, inset, local_y, rect.height
-            );
-        }
         let (local_y, height) = if is_sidebar && inset > 0.0 && local_y <= inset + 0.5 {
             (0.0, rect.height + inset)
         } else {

@@ -82,6 +82,7 @@ objc2-app-kit = { version = "0.2", features = [
     "NSLevelIndicatorCell",
     "NSSplitViewController",
     "NSSplitViewItem",
+    "NSViewController",
     "NSToolbar",
     "NSToolbarItem",
     "NSPanel",

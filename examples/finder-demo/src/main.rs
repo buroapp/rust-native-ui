@@ -139,13 +139,21 @@ fn main() -> Result<(), rn::RnError> {
         .map(|(icon, name)| grid_item(icon, name))
         .collect();
 
-    let content = rn::scroll_view()
+    let content = rn::vstack()
+        .flex(1.0)
+        .gap(0.0)
+        .child(toolbar)
+        .child(rn::separator())
         .child(
-            rn::hstack()
-                .wrap()
-                .gap(16.0)
-                .padding(20.0)
-                .children(items)
+            rn::scroll_view()
+                .child(
+                    rn::hstack()
+                        .wrap()
+                        .gap(16.0)
+                        .padding(20.0)
+                        .children(items)
+                        .build(),
+                )
                 .build(),
         )
         .build();
@@ -157,20 +165,16 @@ fn main() -> Result<(), rn::RnError> {
             .size(1100.0, 700.0)
             .on_close(close)
             .child(
-                rn::vstack()
+                // The window root is the sidebar+content split, so the sidebar is
+                // promoted to a real source-list pane that reaches the top of the
+                // window. The toolbar lives inside the content pane, so it spans only
+                // the content area — exactly where Finder's toolbar sits relative to
+                // its sidebar.
+                rn::hstack()
                     .flex(1.0)
                     .gap(0.0)
-                    .child(toolbar)
-                    .child(rn::separator())
-                    .child(
-                        rn::hstack()
-                            .flex(1.0)
-                            .gap(0.0)
-                            .child(sidebar)
-                            .child(rn::separator())
-                            .child(content)
-                            .build(),
-                    )
+                    .child(sidebar)
+                    .child(content)
                     .build(),
             )
             .build(),

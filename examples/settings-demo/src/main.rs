@@ -171,6 +171,7 @@ fn main() -> Result<(), rn::RnError> {
 
             ComponentTree::new(
                 rn::window()
+                    .modern(true)
                     .title("Settings Demo")
                     .size(720.0, 520.0)
                     .on_close(close_id)
