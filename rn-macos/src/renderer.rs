@@ -3104,28 +3104,14 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
                     | Some(NativeHandle::FlatListWidget(..))
                 )
         });
-        // A sidebar's surface runs to the top of the window, behind the traffic
-        // lights, while its rows stay below the band. That is the whole visual
-        // difference between a pane and a sidebar in modern macOS.
-        let inset = titlebar_inset(content_view);
-        let is_sidebar = state
-            .shadow
-            .get(&node_id)
-            .is_some_and(|s| s.kind == ComponentKind::Sidebar);
-        let (local_y, height) = if is_sidebar && inset > 0.0 && local_y <= inset + 0.5 {
-            (0.0, rect.height + inset)
-        } else {
-            (local_y, rect.height)
-        };
-
         let flipped_y = if parent_is_scroll {
             local_y
         } else {
-            superview_height - local_y - height
+            superview_height - local_y - rect.height
         };
         let ns = NSRect::new(
             NSPoint::new(local_x as f64, flipped_y as f64),
-            NSSize::new(rect.width as f64, height as f64),
+            NSSize::new(rect.width as f64, rect.height as f64),
         );
         log::trace!(
             "setFrame {:?} → x={:.0} y={:.0} w={:.0} h={:.0} (abs:{:.0},{:.0} parent:{:?})",
