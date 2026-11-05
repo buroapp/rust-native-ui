@@ -24,7 +24,7 @@ use std::sync::{Mutex, OnceLock};
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject};
-use objc2::{declare_class, msg_send, msg_send_id, mutability, sel, ClassType, DeclaredClass};
+use objc2::{declare_class, msg_send_id, mutability, sel, ClassType, DeclaredClass};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSBezelStyle, NSButton,
     NSColor, NSColorWell, NSControlTextEditingDelegate, NSControlStateValueOff, NSControlStateValueOn,
@@ -36,15 +36,16 @@ use objc2_app_kit::{
     NSBox, NSBoxType, NSDatePickerElementFlags, NSDatePickerMode, NSImage,
     NSLevelIndicator, NSLevelIndicatorStyle, NSSearchField,
     NSSegmentedControl, NSSwitch,
-    NSTitlePosition, NSVisualEffectView, NSVisualEffectMaterial,
-    NSVisualEffectState,
+    NSTitlePosition,
     NSSplitViewController, NSSplitViewItem, NSViewController,
+    NSOutlineView, NSOutlineViewDataSource, NSOutlineViewDelegate,
+    NSTableColumn, NSTableViewStyle,
 };
 // Phase 2 extra imports for RichText attributed string rendering (FR-008)
 use objc2_app_kit::{NSFont, NSFontManager, NSForegroundColorAttributeName, NSFontAttributeName};
 use objc2_foundation::NSMutableAttributedString;
 use objc2_foundation::{
-    MainThreadMarker, NSArray, NSDate,
+    MainThreadMarker, NSArray, NSDate, NSIndexSet, NSInteger, NSNumber,
     NSNotification, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize,
     NSString, NSTimer,
 };
@@ -121,7 +122,7 @@ enum NativeHandle {
     SheetWidget(Retained<NSView>, Retained<NSWindow>),
     TabViewWidget(Retained<NSTabView>),
     /// Row container, its selection pill, and its label.
-    SidebarItemWidget(Retained<NSView>, Retained<NSBox>, Retained<NSTextField>),
+    SidebarItemWidget(Retained<NSView>),
 }
 
 impl NativeHandle {
@@ -181,7 +182,7 @@ impl NativeHandle {
             NativeHandle::AlertDialogWidget(v) => Some(v),
             NativeHandle::SheetWidget(v, _) => Some(v),
             NativeHandle::TabViewWidget(v) => Some(v),
-            NativeHandle::SidebarItemWidget(v, _, _) => Some(v),
+            NativeHandle::SidebarItemWidget(v) => Some(v),
         }
     }
 }
@@ -1749,25 +1750,13 @@ fn create_node(
         // SidebarSection — small caps group header inside a sidebar
         // ------------------------------------------------------------------
         ComponentKind::SidebarSection => {
-            let title = match props.get(&PropKey::Text) {
-                Some(PropValue::String(s)) => s.clone(),
-                _ => String::new(),
+            // Rendered by the sidebar's NSOutlineView as a group row (read at promote
+            // time). The node is a 0x0 placeholder, never shown.
+            let placeholder: Retained<NSView> = unsafe {
+                NSView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0)))
             };
-            // Aligned with the icon column, the way Finder aligns its headings.
-            let frame = NSRect::new(NSPoint::new(21.0, 0.0), NSSize::new(170.0, 18.0));
-            let tf: Retained<NSTextField> = unsafe {
-                let t = NSTextField::initWithFrame(mtm.alloc(), frame);
-                t.setEditable(false);
-                t.setBordered(false);
-                t.setDrawsBackground(false);
-                t.setStringValue(&NSString::from_str(&title));
-                t.setFont(Some(&NSFont::boldSystemFontOfSize(NSFont::smallSystemFontSize())));
-                t.setTextColor(Some(&NSColor::secondaryLabelColor()));
-                t.setLineBreakMode(NSLineBreakMode(4));
-                t
-            };
-            attach_to_parent(state, parent_id, &tf);
-            state.nodes.insert(node_id, NativeHandle::Label(tf));
+            attach_to_parent(state, parent_id, &placeholder);
+            state.nodes.insert(node_id, NativeHandle::SidebarItemWidget(placeholder));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
@@ -2059,183 +2048,40 @@ fn create_node(
         ComponentKind::Sidebar => {
             let width = f32_prop(&props, PropKey::SidebarWidth, 220.0);
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, 400.0));
-            let vev: Retained<NSVisualEffectView> = unsafe {
-                let v = NSVisualEffectView::initWithFrame(mtm.alloc(), frame);
-                v.setState(NSVisualEffectState::Active);
-                v.setMaterial(NSVisualEffectMaterial::Sidebar);
-                v
+            // A source list is an NSOutlineView in a scroll view. The outline's
+            // rows, cells, selection, keyboard nav and disclosure are AppKit's; we
+            // only supply the data (populated at promote time, once the item/section
+            // children have been created). The scroll view is the sidebar's view.
+            let scroll = new_scroll_container(mtm, frame, false);
+            let outline: Retained<NSOutlineView> = unsafe { NSOutlineView::new(mtm) };
+            let column = unsafe {
+                NSTableColumn::initWithIdentifier(mtm.alloc(), &NSString::from_str("main"))
             };
-            // The sidebar is a vibrancy surface only. Scrolling is the caller's
-            // choice — usually a ScrollView as its single child — because a sidebar
-            // sometimes holds fixed chrome that must not scroll.
-            attach_to_parent(state, parent_id, &vev);
-            state.nodes.insert(node_id, NativeHandle::SidebarWidget(unsafe { Retained::cast(vev) }));
+            unsafe {
+                outline.setStyle(NSTableViewStyle::SourceList);
+                outline.setHeaderView(None);
+                outline.setFloatsGroupRows(false);
+                outline.setIndentationPerLevel(4.0);
+                outline.addTableColumn(&column);
+                outline.setOutlineTableColumn(Some(&column));
+                scroll.setDocumentView(Some(&outline));
+            }
+            attach_to_parent(state, parent_id, &scroll);
+            state.nodes.insert(node_id, NativeHandle::SidebarWidget(unsafe { Retained::cast(scroll) }));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
 
         ComponentKind::SidebarItem => {
-            let label_text = if let Some(PropValue::String(s)) = props.get(&PropKey::Text) {
-                s.clone()
-            } else {
-                String::new()
+            // Rows are rendered by the sidebar's NSOutlineView, which reads this
+            // node's props at promote time (build_sidebar_data). The node itself is
+            // just a 0x0 placeholder so the shadow tree and child bookkeeping stay
+            // consistent; it is never shown.
+            let placeholder: Retained<NSView> = unsafe {
+                NSView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0)))
             };
-            let icon_name = match props.get(&PropKey::IconName) {
-                Some(PropValue::String(s)) => Some(s.clone()),
-                _ => None,
-            };
-            let selected = bool_prop(&props, PropKey::Selected, false);
-
-            // Geometry follows the System Settings sidebar: a 32pt row, a selection
-            // pill inset 12pt from each edge with a 7pt radius, icon at 21pt and the
-            // label at 49pt. The row itself is transparent so the pill can be inset;
-            // a full-bleed fill is what made this look unlike macOS.
-            const ROW_H: f64 = 32.0;
-            const PILL_INSET: f64 = 12.0;
-            const PILL_RADIUS: f64 = 7.0;
-            const ICON_X: f64 = 21.0;
-            const ICON_SIZE: f64 = 20.0;
-            // Without an icon the label takes the icon's column rather than leaving
-            // a hole where a glyph would have been.
-            let label_x: f64 = if icon_name.is_some() { 49.0 } else { ICON_X };
-
-            let row_width = 210.0_f64;
-            let row: Retained<NSView> = unsafe {
-                NSView::initWithFrame(
-                    mtm.alloc(),
-                    NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(row_width, ROW_H)),
-                )
-            };
-
-            let pill: Retained<NSBox> = unsafe {
-                let b = NSBox::initWithFrame(
-                    mtm.alloc(),
-                    NSRect::new(
-                        NSPoint::new(PILL_INSET, 0.0),
-                        NSSize::new(row_width - PILL_INSET * 2.0, ROW_H),
-                    ),
-                );
-                b.setBoxType(NSBoxType::NSBoxCustom);
-                b.setCornerRadius(PILL_RADIUS);
-                b.setBorderWidth(0.0);
-                b.setContentViewMargins(NSSize::new(0.0, 0.0));
-                let fill = if selected {
-                    NSColor::controlAccentColor()
-                } else {
-                    NSColor::clearColor()
-                };
-                b.setFillColor(&fill);
-                b.setAutoresizingMask(
-                    NSAutoresizingMaskOptions::NSViewWidthSizable
-                        | NSAutoresizingMaskOptions::NSViewHeightSizable,
-                );
-                row.addSubview(&b);
-                b
-            };
-
-            if let Some(name) = &icon_name {
-                let ns_name = NSString::from_str(name);
-                // A bad symbol name yields no image, so fall back to one that exists
-                // rather than rendering a hole.
-                let image = unsafe {
-                    NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
-                        .or_else(|| {
-                            NSImage::imageWithSystemSymbolName_accessibilityDescription(
-                                &NSString::from_str("square"),
-                                None,
-                            )
-                        })
-                };
-                if let Some(image) = image {
-                    unsafe {
-                        let iv = NSImageView::initWithFrame(
-                            mtm.alloc(),
-                            NSRect::new(
-                                NSPoint::new(ICON_X, (ROW_H - ICON_SIZE) / 2.0),
-                                NSSize::new(ICON_SIZE, ICON_SIZE),
-                            ),
-                        );
-                        iv.setImage(Some(&image));
-                        iv.setImageScaling(
-                            objc2_app_kit::NSImageScaling::NSImageScaleProportionallyUpOrDown,
-                        );
-                        let tint = if selected {
-                            NSColor::whiteColor()
-                        } else {
-                            NSColor::labelColor()
-                        };
-                        iv.setContentTintColor(Some(&tint));
-                        iv.setAutoresizingMask(
-                            NSAutoresizingMaskOptions::NSViewMinYMargin
-                                | NSAutoresizingMaskOptions::NSViewMaxYMargin,
-                        );
-                        row.addSubview(&iv);
-                    }
-                }
-            }
-
-            let label: Retained<NSTextField> = unsafe {
-                let t = NSTextField::initWithFrame(
-                    mtm.alloc(),
-                    NSRect::new(
-                        NSPoint::new(label_x, (ROW_H - 18.0) / 2.0),
-                        NSSize::new((row_width - label_x - 8.0).max(20.0), 18.0),
-                    ),
-                );
-                t.setEditable(false);
-                t.setBordered(false);
-                t.setDrawsBackground(false);
-                t.setStringValue(&NSString::from_str(&label_text));
-                let font = if selected {
-                    NSFont::boldSystemFontOfSize(NSFont::systemFontSize())
-                } else {
-                    NSFont::systemFontOfSize(NSFont::systemFontSize())
-                };
-                t.setFont(Some(&font));
-                let color = if selected {
-                    NSColor::whiteColor()
-                } else {
-                    NSColor::labelColor()
-                };
-                t.setTextColor(Some(&color));
-                t.setLineBreakMode(NSLineBreakMode(4)); // truncate tail
-                t.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
-                row.addSubview(&t);
-                t
-            };
-
-            // Invisible overlay for the click, with the row text as its accessible
-            // name — the label is a sibling, so VoiceOver would not associate it.
-            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnSelect) {
-                let target = ButtonTarget::new(mtm, *h, node_id);
-                unsafe {
-                    let btn: Retained<NSButton> = NSButton::initWithFrame(
-                        mtm.alloc(),
-                        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(row_width, ROW_H)),
-                    );
-                    btn.setBezelStyle(NSBezelStyle::Automatic);
-                    btn.setBordered(false);
-                    btn.setTransparent(true);
-                    btn.setTitle(&NSString::from_str(""));
-                    let ax_label = NSString::from_str(&label_text);
-                    let _: () = msg_send![&*btn, setAccessibilityLabel: &*ax_label];
-                    let obj: &AnyObject = &target;
-                    btn.setTarget(Some(obj));
-                    btn.setAction(Some(sel!(fire:)));
-                    btn.setAutoresizingMask(
-                        NSAutoresizingMaskOptions::NSViewWidthSizable
-                            | NSAutoresizingMaskOptions::NSViewHeightSizable,
-                    );
-                    row.addSubview(&btn);
-                }
-                stash_delegate(node_id, DelegateHandle::Button(target));
-            }
-
-            attach_to_parent(state, parent_id, &row);
-            state.nodes.insert(
-                node_id,
-                NativeHandle::SidebarItemWidget(row, pill, label),
-            );
+            attach_to_parent(state, parent_id, &placeholder);
+            state.nodes.insert(node_id, NativeHandle::SidebarItemWidget(placeholder));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
@@ -2430,26 +2276,10 @@ fn update_node(
                     unsafe { sc.setSelectedSegment(*f as isize) };
                 }
             }
-            (NativeHandle::SidebarWidget(_), PropKey::Selected) => {} // selection styling handled via SidebarItem
-            // SidebarItem selection: repaint the pill and label in place.
-            (NativeHandle::SidebarItemWidget(_, pill, label), PropKey::Selected) => {
-                let selected = matches!(value, PropValue::Bool(true));
-                unsafe {
-                    let fill = if selected {
-                        NSColor::controlAccentColor()
-                    } else {
-                        NSColor::clearColor()
-                    };
-                    pill.setFillColor(&fill);
-                    let (color, font) = if selected {
-                        (NSColor::whiteColor(), NSFont::boldSystemFontOfSize(NSFont::systemFontSize()))
-                    } else {
-                        (NSColor::labelColor(), NSFont::systemFontOfSize(NSFont::systemFontSize()))
-                    };
-                    label.setTextColor(Some(&color));
-                    label.setFont(Some(&font));
-                }
-            }
+            (NativeHandle::SidebarWidget(_), PropKey::Selected) => {} // outline view owns selection
+            // SidebarItem selection is owned by the NSOutlineView now; nothing to
+            // repaint by hand. The pill and manual repaint this replaced are gone.
+            (NativeHandle::SidebarItemWidget(_), PropKey::Selected) => {}
             _ => {}
         }
     }
@@ -2673,11 +2503,172 @@ fn promote_split_window(state_cell: &Rc<RefCell<RendererState>>, window_id: Node
     unsafe { window.setContentViewController(Some(&split_controller)) };
 
     // Re-borrow only now, to record the panes.
-    state_cell.borrow_mut().split_panes.insert(window_id, recorded);
+    state_cell.borrow_mut().split_panes.insert(window_id, recorded.clone());
+
+    // Populate each sidebar pane's outline view from its item/section children.
+    // Done here, after the whole tree exists, because the data source is a pull
+    // model: the children were created after the Sidebar node itself.
+    for (pane_id, pane_view) in &recorded {
+        populate_sidebar(state_cell, *pane_id, pane_view);
+    }
+
     log::debug!(
         "promote_split_window: {:?} hosted in NSSplitViewController",
         window_id
     );
+}
+
+/// Build the outline view's data from a sidebar node's shadow children and attach
+/// a SidebarModel as its data source and delegate. No-op if the pane is not a
+/// Sidebar (content panes have no outline view).
+fn populate_sidebar(state_cell: &Rc<RefCell<RendererState>>, pane_id: NodeId, pane_view: &NSView) {
+    // Read the sidebar's children under a short borrow and build the data snapshot.
+    let (mtm, data, is_sidebar) = {
+        let state = state_cell.borrow();
+        let is_sidebar = state
+            .shadow
+            .get(&pane_id)
+            .is_some_and(|s| s.kind == ComponentKind::Sidebar);
+        if !is_sidebar {
+            return;
+        }
+        (state.mtm, build_sidebar_data(&state, pane_id), true)
+    };
+    let _ = is_sidebar;
+    let (data, initial_selected_row) = data;
+
+    // The pane view is the scroll view; its document is the outline view.
+    let scroll: &NSScrollView = unsafe { &*(pane_view as *const NSView as *const NSScrollView) };
+    let Some(doc) = (unsafe { scroll.documentView() }) else {
+        return;
+    };
+    let outline: &NSOutlineView = unsafe { &*(Retained::as_ptr(&doc) as *const NSOutlineView) };
+
+    let model = SidebarModel::new(mtm, data, initial_selected_row);
+    unsafe {
+        outline.setDataSource(Some(ProtocolObject::from_ref(&*model)));
+        outline.setDelegate(Some(ProtocolObject::from_ref(&*model)));
+        outline.reloadData();
+        // Sections start expanded, the way a Finder/Settings source list does.
+        outline.expandItem_expandChildren(None, true);
+        // Apply the app's initial selection: the row whose Selected prop is true.
+        // selectRow is a plain row index into the fully-expanded outline.
+        if let Some(row) = model.ivars().initial_selected_row {
+            let set = NSIndexSet::indexSetWithIndex(row);
+            outline.selectRowIndexes_byExtendingSelection(&set, false);
+        }
+    }
+    stash_delegate(pane_id, DelegateHandle::Sidebar(model));
+}
+
+/// Flatten a sidebar node's children into sections and rows. Items before the
+/// first section go into an implicit untitled group so they still render. Returns
+/// the data plus the fully-expanded outline row index of the item the app marked
+/// Selected, if any, so initial selection can be applied.
+fn build_sidebar_data(state: &RendererState, sidebar_id: NodeId) -> (SidebarData, Option<usize>) {
+    let mut roots: Vec<SidebarSectionData> = Vec::new();
+    let mut implicit: Option<SidebarSectionData> = None;
+    // (section_is_implicit, item_index_within_section) of the selected row.
+    let mut selected: Option<(bool, usize)> = None;
+
+    let children: Vec<NodeId> = state
+        .shadow
+        .get(&sidebar_id)
+        .map(|s| s.children.clone())
+        .unwrap_or_default();
+
+    let rows = flatten_sidebar_children(state, &children);
+
+    for (kind, node_id, props) in rows {
+        match kind {
+            ComponentKind::SidebarSection => {
+                let title = string_prop(&props, PropKey::Text, "");
+                roots.push(SidebarSectionData { title: Some(title), items: Vec::new() });
+            }
+            ComponentKind::SidebarItem => {
+                let label = string_prop(&props, PropKey::Text, "");
+                let icon = match props.get(&PropKey::IconName) {
+                    Some(PropValue::String(s)) => Some(s.clone()),
+                    _ => None,
+                };
+                let handler = match props.get(&PropKey::OnSelect) {
+                    Some(PropValue::HandlerRef(h)) => Some(*h),
+                    _ => None,
+                };
+                let is_selected = bool_prop(&props, PropKey::Selected, false);
+                let item = SidebarRow::Item { node_id, label, icon, handler };
+                if let Some(last) = roots.last_mut() {
+                    if is_selected {
+                        selected = Some((false, last.items.len()));
+                    }
+                    last.items.push(item);
+                } else {
+                    let group = implicit.get_or_insert_with(|| SidebarSectionData { title: None, items: Vec::new() });
+                    if is_selected {
+                        selected = Some((true, group.items.len()));
+                    }
+                    group.items.push(item);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut out = Vec::new();
+    if let Some(imp) = implicit {
+        out.push(imp);
+    }
+    out.extend(roots);
+
+    // Translate (implicit?, item index) to a flat outline row: walk sections in
+    // final order, counting one row per header plus one per item, and stop at the
+    // matching section. The selected section is the implicit group (section 0, no
+    // title) or the first titled section that holds the index.
+    let selected_row = selected.and_then(|(is_implicit, item_idx)| {
+        let mut row = 0usize;
+        for sec in &out {
+            let matches_section = if is_implicit {
+                sec.title.is_none()
+            } else {
+                sec.title.is_some()
+            };
+            if matches_section && item_idx < sec.items.len() {
+                return Some(row + 1 + item_idx); // +1 for the header row
+            }
+            row += 1 + sec.items.len();
+        }
+        None
+    });
+
+    (SidebarData { roots: out }, selected_row)
+}
+
+/// Collect (kind, node, props) for sidebar rows, descending through a single
+/// wrapping container (a vstack is the common case).
+fn flatten_sidebar_children(
+    state: &RendererState,
+    children: &[NodeId],
+) -> Vec<(ComponentKind, NodeId, Props)> {
+    let mut out = Vec::new();
+    for &child in children {
+        let Some(shadow) = state.shadow.get(&child) else { continue };
+        match shadow.kind {
+            ComponentKind::SidebarItem | ComponentKind::SidebarSection => {
+                out.push((shadow.kind, child, shadow.props.clone()));
+            }
+            _ => {
+                // Descend one level into a wrapping container.
+                for &grand in &shadow.children {
+                    if let Some(gs) = state.shadow.get(&grand) {
+                        if matches!(gs.kind, ComponentKind::SidebarItem | ComponentKind::SidebarSection) {
+                            out.push((gs.kind, grand, gs.props.clone()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 fn relayout_window(state: &RendererState, window_id: NodeId) {
@@ -3376,6 +3367,219 @@ fn new_document_view(mtm: MainThreadMarker, size: NSSize) -> Retained<NSView> {
     }
 }
 
+/// One selectable row in a sidebar's source list.
+#[derive(Clone)]
+enum SidebarRow {
+    Item { node_id: NodeId, label: String, icon: Option<String>, handler: Option<HandlerId> },
+}
+
+/// Flattened sidebar contents the outline view reads. The tree is one level deep:
+/// section headings are roots, the items that follow a heading are its children,
+/// and items before any heading are children of an implicit unnamed root.
+///
+/// NSOutlineView is a pull model — it asks us for children and cells — so the
+/// reconciler's push-built child views are replaced by this snapshot. Outline
+/// items are `NSNumber` indices into `roots` / a section's `children`.
+struct SidebarData {
+    /// Each root is a section; `None` title is the implicit pre-heading group.
+    roots: Vec<SidebarSectionData>,
+}
+
+struct SidebarSectionData {
+    title: Option<String>,
+    items: Vec<SidebarRow>,
+}
+
+struct SidebarModelIvars {
+    data: SidebarData,
+    /// The fully-expanded outline row index the app marked Selected, if any.
+    initial_selected_row: Option<usize>,
+}
+
+declare_class!(
+    struct SidebarModel;
+
+    unsafe impl ClassType for SidebarModel {
+        type Super = NSObject;
+        type Mutability = mutability::MainThreadOnly;
+        const NAME: &'static str = "RnSidebarModel";
+    }
+
+    impl DeclaredClass for SidebarModel {
+        type Ivars = SidebarModelIvars;
+    }
+
+    unsafe impl NSObjectProtocol for SidebarModel {}
+
+    // NSOutlineViewDelegate requires NSControlTextEditingDelegate as a supertrait;
+    // we use none of its methods.
+    unsafe impl NSControlTextEditingDelegate for SidebarModel {}
+
+    unsafe impl NSOutlineViewDataSource for SidebarModel {
+        // item is nil → top level (sections). item is a section index → its items.
+        #[method(outlineView:numberOfChildrenOfItem:)]
+        unsafe fn number_of_children(&self, _ov: &NSOutlineView, item: Option<&AnyObject>) -> NSInteger {
+            let data = &self.ivars().data;
+            match decode_item(item) {
+                None => data.roots.len() as NSInteger,
+                Some(ItemRef::Section(s)) => {
+                    data.roots.get(s).map_or(0, |sec| sec.items.len()) as NSInteger
+                }
+                Some(ItemRef::Row(..)) => 0,
+            }
+        }
+
+        #[method_id(outlineView:child:ofItem:)]
+        unsafe fn child_of_item(&self, _ov: &NSOutlineView, index: NSInteger, item: Option<&AnyObject>) -> Retained<AnyObject> {
+            // Encode the child as an NSNumber the other callbacks decode. Section
+            // children encode (section<<20 | row + 1); sections encode their index.
+            let tag = match decode_item(item) {
+                None => index as i64,                       // a section
+                Some(ItemRef::Section(s)) => (((s as i64) << 20) | (index as i64)) | ROW_FLAG,
+                Some(ItemRef::Row(..)) => 0,
+            };
+            Retained::cast::<AnyObject>(NSNumber::numberWithLongLong(tag))
+        }
+
+        #[method(outlineView:isItemExpandable:)]
+        unsafe fn is_expandable(&self, _ov: &NSOutlineView, item: &AnyObject) -> bool {
+            matches!(decode_item(Some(item)), Some(ItemRef::Section(_)))
+        }
+    }
+
+    unsafe impl NSOutlineViewDelegate for SidebarModel {
+        #[method(outlineView:isGroupItem:)]
+        unsafe fn is_group_item(&self, _ov: &NSOutlineView, item: &AnyObject) -> bool {
+            matches!(decode_item(Some(item)), Some(ItemRef::Section(_)))
+        }
+
+        // Section headings are not selectable; item rows are.
+        #[method(outlineView:shouldSelectItem:)]
+        unsafe fn should_select(&self, _ov: &NSOutlineView, item: &AnyObject) -> bool {
+            matches!(decode_item(Some(item)), Some(ItemRef::Row(..)))
+        }
+
+        #[method_id(outlineView:viewForTableColumn:item:)]
+        unsafe fn view_for_item(&self, _ov: &NSOutlineView, _col: Option<&NSTableColumn>, item: &AnyObject) -> Option<Retained<NSView>> {
+            let data = &self.ivars().data;
+            match (MainThreadMarker::new(), decode_item(Some(item))) {
+                (Some(mtm), Some(ItemRef::Section(s))) => {
+                    let title = data.roots.get(s).and_then(|sec| sec.title.clone()).unwrap_or_default();
+                    Some(make_sidebar_label(mtm, &title, None, true))
+                }
+                (Some(mtm), Some(ItemRef::Row(s, r))) => {
+                    match data.roots.get(s).and_then(|sec| sec.items.get(r)) {
+                        Some(SidebarRow::Item { label, icon, .. }) => {
+                            Some(make_sidebar_label(mtm, label, icon.as_deref(), false))
+                        }
+                        _ => None,
+                    }
+                }
+                _ => None,
+            }
+        }
+
+        #[method(outlineViewSelectionDidChange:)]
+        unsafe fn selection_did_change(&self, notification: &NSNotification) {
+            let ov = match notification.object() {
+                Some(o) => o,
+                None => return,
+            };
+            let ov: &NSOutlineView = &*(Retained::as_ptr(&ov) as *const NSOutlineView);
+            let row = ov.selectedRow();
+            if row < 0 {
+                return;
+            }
+            let item = match ov.itemAtRow(row) {
+                Some(i) => i,
+                None => return,
+            };
+            if let Some(ItemRef::Row(s, r)) = decode_item(Some(&item)) {
+                if let Some(SidebarRow::Item { node_id, handler: Some(h), .. }) =
+                    self.ivars().data.roots.get(s).and_then(|sec| sec.items.get(r))
+                {
+                    rn_core::dispatch_event(Event {
+                        source: *node_id,
+                        handler: *h,
+                        kind: EventKind::Press,
+                        payload: EventPayload::None,
+                        stop_bubbling: false,
+                    });
+                }
+            }
+        }
+    }
+);
+
+/// Item encoding. A section is its plain index. A row sets ROW_FLAG and packs the
+/// section in the high bits and the row in the low bits.
+const ROW_FLAG: i64 = 1 << 40;
+
+enum ItemRef {
+    Section(usize),
+    Row(usize, usize),
+}
+
+fn decode_item(item: Option<&AnyObject>) -> Option<ItemRef> {
+    let item = item?;
+    // Every item we vend is an NSNumber.
+    let num: &NSNumber = unsafe { &*(item as *const AnyObject as *const NSNumber) };
+    let tag = num.longLongValue();
+    if tag & ROW_FLAG != 0 {
+        let body = tag & !ROW_FLAG;
+        Some(ItemRef::Row((body >> 20) as usize, (body & 0xFFFFF) as usize))
+    } else {
+        Some(ItemRef::Section(tag as usize))
+    }
+}
+
+impl SidebarModel {
+    fn new(mtm: MainThreadMarker, data: SidebarData, initial_selected_row: Option<usize>) -> Retained<Self> {
+        let this = mtm.alloc().set_ivars(SidebarModelIvars { data, initial_selected_row });
+        unsafe { msg_send_id![super(this), init] }
+    }
+}
+
+/// Build a source-list cell: an SF Symbol (optional) and a label. A group row uses
+/// the small-caps secondary style; an item uses the standard label.
+fn make_sidebar_label(mtm: MainThreadMarker, text: &str, icon: Option<&str>, group: bool) -> Retained<NSView> {
+    let container = unsafe {
+        NSView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(180.0, 24.0)))
+    };
+    let mut label_x = 2.0;
+    if let Some(name) = icon {
+        if let Some(image) = unsafe {
+            NSImage::imageWithSystemSymbolName_accessibilityDescription(&NSString::from_str(name), None)
+        } {
+            let iv = unsafe {
+                NSImageView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(2.0, 3.0), NSSize::new(18.0, 18.0)))
+            };
+            unsafe {
+                iv.setImage(Some(&image));
+                iv.setContentTintColor(Some(&NSColor::labelColor()));
+                container.addSubview(&iv);
+            }
+            label_x = 26.0;
+        }
+    }
+    let label = unsafe {
+        NSTextField::labelWithString(&NSString::from_str(text), mtm)
+    };
+    unsafe {
+        label.setFrame(NSRect::new(NSPoint::new(label_x, 2.0), NSSize::new(180.0 - label_x - 4.0, 18.0)));
+        label.setBordered(false);
+        label.setDrawsBackground(false);
+        if group {
+            label.setFont(Some(&NSFont::boldSystemFontOfSize(NSFont::smallSystemFontSize())));
+            label.setTextColor(Some(&NSColor::secondaryLabelColor()));
+        } else {
+            label.setFont(Some(&NSFont::systemFontOfSize(NSFont::systemFontSize())));
+        }
+        container.addSubview(&label);
+    }
+    container
+}
+
 /// Supplies `NSToolbarItem`s from the actions an application declared.
 ///
 /// An `NSToolbar` is owned by the window and lives in its titlebar; it is not a view
@@ -3888,6 +4092,9 @@ enum DelegateHandle {
     TabItem(Retained<NSTabViewItem>),
     /// The window retains the toolbar; the delegate must not die with the render pass.
     Toolbar(Retained<ToolbarDelegate>),
+    /// The outline view holds the sidebar model as a weak data-source/delegate ref,
+    /// so we must keep it alive here.
+    Sidebar(Retained<SidebarModel>),
 }
 
 thread_local! {
