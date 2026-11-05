@@ -39,21 +39,21 @@ user-story priority.
 
 ## Phase 4 — Sidebar (User Story 1, P1)
 
-- [~] T011 Host sidebar rows in an `NSOutlineView` with source-list style inside an
+- [X] T011 Host sidebar rows in an `NSOutlineView` with source-list style inside an
       `NSSplitViewController` sidebar item (FR-001, FR-003, FR-004).
-      DONE: the sidebar is now an `NSSplitViewController` sidebar item
-      (`sidebarWithViewController`), so it reaches the top of the window, gets real
-      vibrancy and a draggable divider, and the toolbar band no longer covers it.
-      A window whose root is a SplitView or an hstack with a leading Sidebar is
-      promoted automatically; taffy still lays out each pane's interior.
-      REMAINING: rows are still our own views inside the pane, not `NSOutlineView`
-      cells. The outline-view swap (keyboard nav, disclosure, AppKit selection) is
-      still open and does not block the chrome fix.
-- [ ] T012 Feed row label, icon and selected state from the existing props so
-      applications keep working unchanged (FR-002, FR-005) — unchanged; rows still
-      read the same props.
-- [ ] T013 Delete the `NSBox` pill and the manual selection repaint it replaced
-      (FR-003, FR-012) — blocked on T012's outline-view cells.
+      The sidebar pane is an `NSScrollView` whose document is an `NSOutlineView`
+      (`NSTableViewStyle::SourceList`). A `SidebarModel` NSObject is its data source
+      and delegate, built at promote time from the item/section children. Rows,
+      cells, selection, keyboard navigation and group disclosure are AppKit's.
+- [X] T012 Feed row label, icon and selected state from the existing props so
+      applications keep working unchanged (FR-002, FR-005). `build_sidebar_data`
+      reads Text/IconName/OnSelect/Selected; selection fires `OnSelect` through the
+      existing event path (verified: AX row select → `outlineViewSelectionDidChange`
+      → dispatch). Initial `Selected` prop becomes the outline's selected row.
+- [X] T013 Delete the `NSBox` pill and the manual selection repaint it replaced
+      (FR-003, FR-012). `SidebarItem`/`SidebarSection` no longer build views — they
+      are 0x0 placeholders read as data; the `update_node` pill repaint is gone; the
+      `SidebarItemWidget` three-field variant collapsed to one.
 
 ## Phase 5 — Polish
 

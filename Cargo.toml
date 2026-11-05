@@ -92,6 +92,8 @@ objc2-app-kit = { version = "0.2", features = [
     "NSTableColumn",
     "NSTableCellView",
     "NSTableRowView",
+    "NSTableHeaderView",
+    "NSUserInterfaceItemIdentification",
     "NSVisualEffectView",
     "NSClipView",
     "NSAttributedString",
