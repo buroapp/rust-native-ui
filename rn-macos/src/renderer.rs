@@ -2643,32 +2643,33 @@ fn build_sidebar_data(state: &RendererState, sidebar_id: NodeId) -> (SidebarData
     (SidebarData { roots: out }, selected_row)
 }
 
-/// Collect (kind, node, props) for sidebar rows, descending through a single
-/// wrapping container (a vstack is the common case).
+/// Collect (kind, node, props) for every SidebarItem/SidebarSection anywhere under
+/// the sidebar, in tree order. Recurses through any wrapping containers (a
+/// ScrollView+vstack is common) so the outline data does not depend on how deep
+/// the app nests its rows.
 fn flatten_sidebar_children(
     state: &RendererState,
     children: &[NodeId],
 ) -> Vec<(ComponentKind, NodeId, Props)> {
     let mut out = Vec::new();
+    collect_sidebar_rows(state, children, &mut out);
+    out
+}
+
+fn collect_sidebar_rows(
+    state: &RendererState,
+    children: &[NodeId],
+    out: &mut Vec<(ComponentKind, NodeId, Props)>,
+) {
     for &child in children {
         let Some(shadow) = state.shadow.get(&child) else { continue };
         match shadow.kind {
             ComponentKind::SidebarItem | ComponentKind::SidebarSection => {
                 out.push((shadow.kind, child, shadow.props.clone()));
             }
-            _ => {
-                // Descend one level into a wrapping container.
-                for &grand in &shadow.children {
-                    if let Some(gs) = state.shadow.get(&grand) {
-                        if matches!(gs.kind, ComponentKind::SidebarItem | ComponentKind::SidebarSection) {
-                            out.push((gs.kind, grand, gs.props.clone()));
-                        }
-                    }
-                }
-            }
+            _ => collect_sidebar_rows(state, &shadow.children, out),
         }
     }
-    out
 }
 
 fn relayout_window(state: &RendererState, window_id: NodeId) {

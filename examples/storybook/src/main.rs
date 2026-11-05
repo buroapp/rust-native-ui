@@ -261,6 +261,7 @@ fn main() -> Result<(), rn::RnError> {
 
                 ComponentTree::new(
                     rn::window()
+                        .modern(true)
                         .title("Rust Native — Storybook")
                         .size(1000.0, 720.0)
                         .on_close(close_id)
