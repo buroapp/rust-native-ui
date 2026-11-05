@@ -39,12 +39,21 @@ user-story priority.
 
 ## Phase 4 — Sidebar (User Story 1, P1)
 
-- [ ] T011 Host sidebar rows in an `NSOutlineView` with source-list style inside an
-      `NSSplitViewController` sidebar item (FR-001, FR-003, FR-004)
+- [~] T011 Host sidebar rows in an `NSOutlineView` with source-list style inside an
+      `NSSplitViewController` sidebar item (FR-001, FR-003, FR-004).
+      DONE: the sidebar is now an `NSSplitViewController` sidebar item
+      (`sidebarWithViewController`), so it reaches the top of the window, gets real
+      vibrancy and a draggable divider, and the toolbar band no longer covers it.
+      A window whose root is a SplitView or an hstack with a leading Sidebar is
+      promoted automatically; taffy still lays out each pane's interior.
+      REMAINING: rows are still our own views inside the pane, not `NSOutlineView`
+      cells. The outline-view swap (keyboard nav, disclosure, AppKit selection) is
+      still open and does not block the chrome fix.
 - [ ] T012 Feed row label, icon and selected state from the existing props so
-      applications keep working unchanged (FR-002, FR-005)
+      applications keep working unchanged (FR-002, FR-005) — unchanged; rows still
+      read the same props.
 - [ ] T013 Delete the `NSBox` pill and the manual selection repaint it replaced
-      (FR-003, FR-012)
+      (FR-003, FR-012) — blocked on T012's outline-view cells.
 
 ## Phase 5 — Polish
 

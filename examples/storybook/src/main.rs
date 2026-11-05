@@ -103,6 +103,26 @@ fn main() -> Result<(), rn::RnError> {
         use rn::{ComponentTree, HandlerId, UpdateMessage};
 
         env_logger::init();
+
+        // `storybook --list` dumps the catalog as JSON and exits. The doc generator
+        // reads this so component docs have exactly one source of truth — the same
+        // catalog the app and the drift test use.
+        if std::env::args().any(|a| a == "--list") {
+            print!("[");
+            for (i, e) in CATALOG.iter().enumerate() {
+                let comma = if i + 1 < CATALOG.len() { "," } else { "" };
+                // Fields are plain ASCII identifiers and short English; escape quotes
+                // defensively anyway.
+                let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+                print!(
+                    "{{\"index\":{},\"category\":\"{}\",\"name\":\"{}\",\"summary\":\"{}\"}}{}",
+                    i, esc(e.category), esc(e.name), esc(e.summary), comma
+                );
+            }
+            println!("]");
+            return Ok(());
+        }
+
         rn::thread::MainThreadGuard::init_current();
         let mut renderer = MacosRenderer::new().map_err(rn::RnError::Render)?;
 
