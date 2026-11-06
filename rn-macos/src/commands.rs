@@ -1,14 +1,15 @@
 // rn-macos/src/commands.rs — Phase A: command and keyboard layer
 
-use objc2::runtime::AnyObject;
+use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::sel;
+use objc2::{declare_class, msg_send_id, mutability, ClassType, DeclaredClass};
 use objc2::rc::Retained;
 use objc2_app_kit::{
     NSApplication, NSMenu, NSMenuItem,
     NSCommandKeyMask, NSShiftKeyMask, NSAlternateKeyMask, NSControlKeyMask,
     NSEventModifierFlags,
 };
-use objc2_foundation::{MainThreadMarker, NSString};
+use objc2_foundation::{MainThreadMarker, NSObject, NSObjectProtocol, NSString};
 use rn_core::data::{AvailabilityRule, Command, CommandSet, Modifiers};
 
 /// Install the application main menu from a `CommandSet`.
@@ -59,9 +60,24 @@ pub(crate) fn install_main_menu_with_targets(
 
     for (menu_name, entries) in &groups {
         let submenu = make_menu(mtm, menu_name);
+        // Collect WhenFlag items for the menu delegate.
+        let mut flag_items: Vec<(Retained<NSMenuItem>, rn_core::data::FlagId)> = Vec::new();
         for (target_obj, cmd) in entries {
             let item = make_menu_item(mtm, cmd, target_obj);
+            if let rn_core::data::AvailabilityRule::WhenFlag(id) = cmd.available {
+                flag_items.push((Retained::clone(&item), id));
+            }
             submenu.addItem(&item);
+        }
+        // FR-003/FR-004: attach MenuOpenDelegate so enabled state updates before display.
+        if !flag_items.is_empty() {
+            let delegate = MenuOpenDelegate::new(mtm, flag_items);
+            unsafe {
+                submenu.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
+            }
+            // Keep the delegate alive by stashing on the submenu (NSMenu retains its delegate weakly).
+            // We'll leak it deliberately — the app menu lives for the lifetime of the app.
+            std::mem::forget(delegate);
         }
         let parent = bare_item(mtm, menu_name);
         parent.setSubmenu(Some(&submenu));
@@ -125,6 +141,58 @@ pub(crate) fn modifiers_to_ns(m: Modifiers) -> NSEventModifierFlags {
     if m.contains(Modifiers::OPTION)   { f.0 |= NSAlternateKeyMask.0; }
     if m.contains(Modifiers::CONTROL)  { f.0 |= NSControlKeyMask.0; }
     f
+}
+
+
+// ---------------------------------------------------------------------------
+// FR-003/FR-004: NSMenuDelegate to update WhenFlag item enabled state on open
+// ---------------------------------------------------------------------------
+
+use objc2_app_kit::NSMenuDelegate;
+
+/// A simple menu delegate that re-evaluates `WhenFlag` enabled state before
+/// the menu appears, so visual greying reflects the current flag state.
+#[allow(dead_code)]
+pub(crate) struct MenuDelegateIvars {
+    /// Pairs of (NSMenuItem, FlagId) for items that have `WhenFlag` availability.
+    items: Vec<(Retained<NSMenuItem>, rn_core::data::FlagId)>,
+}
+
+declare_class!(
+    pub(crate) struct MenuOpenDelegate;
+
+    unsafe impl ClassType for MenuOpenDelegate {
+        type Super = NSObject;
+        type Mutability = mutability::MainThreadOnly;
+        const NAME: &'static str = "RnMenuOpenDelegate";
+    }
+
+    impl DeclaredClass for MenuOpenDelegate {
+        type Ivars = std::cell::UnsafeCell<Vec<(Retained<NSMenuItem>, rn_core::data::FlagId)>>;
+    }
+
+    unsafe impl NSObjectProtocol for MenuOpenDelegate {}
+
+    unsafe impl NSMenuDelegate for MenuOpenDelegate {
+        #[method(menuWillOpen:)]
+        unsafe fn menu_will_open(&self, _menu: &NSMenu) {
+            let items = &*self.ivars().get();
+            for (item, flag_id) in items {
+                let enabled = flag_is_enabled(*flag_id);
+                item.setEnabled(enabled);
+            }
+        }
+    }
+);
+
+impl MenuOpenDelegate {
+    fn new(
+        mtm: MainThreadMarker,
+        flag_items: Vec<(Retained<NSMenuItem>, rn_core::data::FlagId)>,
+    ) -> Retained<Self> {
+        let this = mtm.alloc().set_ivars(std::cell::UnsafeCell::new(flag_items));
+        unsafe { msg_send_id![super(this), init] }
+    }
 }
 
 // ---------------------------------------------------------------------------

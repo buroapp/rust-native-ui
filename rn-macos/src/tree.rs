@@ -126,6 +126,8 @@ pub(crate) struct TreeSources {
     pub delegate: Retained<TreeDelegate>,
     #[allow(dead_code)]
     pub inner: Rc<TreeSourcesInner>,
+    /// Optional target for NSOutlineView doubleAction (OnActivate).
+    pub activate: Option<Retained<objc2::runtime::NSObject>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +402,7 @@ pub(crate) fn make_tree_sources(
     let raw: *const TreeSourcesInner = Rc::as_ptr(&inner);
     let data = TreeDataSource::new(mtm, raw, source);
     let delegate = TreeDelegate::new(mtm, raw, source, handler_select, handler_activate);
-    TreeSources { data, delegate, inner }
+    TreeSources { data, delegate, inner, activate: None }
 }
 
 #[allow(dead_code)]

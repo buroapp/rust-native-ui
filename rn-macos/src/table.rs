@@ -107,9 +107,9 @@ declare_class!(
                     SortDescriptor { column: c.id, direction: dir }
                 })
             };
-            // FR-010: update sort indicator.
-            if let Some(ref sd) = model.sort {
-                // Find the NSTableColumn with a matching title.
+            // FR-010: update sort indicator — must use new_sort (just computed), not model.sort (old value).
+            if let Some(ref sd) = new_sort {
+                // Find the NSTableColumn with a matching title and highlight it.
                 let cols = tv.tableColumns();
                 let n = cols.count();
                 for i in 0..n {
@@ -139,7 +139,17 @@ declare_class!(
                     });
                 }
             }
+            // FR-010/edge: preserve scroll position across sort reload.
+            let first_visible = {
+                let vis = tv.visibleRect();
+                unsafe { tv.rowAtPoint(vis.origin) }
+            };
             tv.reloadData();
+            let row_count = unsafe { tv.numberOfRows() };
+            if row_count > 0 && first_visible >= 0 {
+                let target = first_visible.min(row_count - 1);
+                unsafe { tv.scrollRowToVisible(target) };
+            }
         }
     }
 );
@@ -184,8 +194,8 @@ unsafe fn make_cell_view(
     tf.setEditable(false);
     tf.setBordered(false);
     tf.setDrawsBackground(false);
-    // Add icon if the cell has one.
-    let text_x = if let Some(icon_name) = icon_name {
+    // Add icon if the cell has one and position the text field to the right of it.
+    let text_x: f32 = if let Some(icon_name) = icon_name {
         let img = unsafe {
             objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(
                 &NSString::from_str(&icon_name), None,
@@ -196,11 +206,13 @@ unsafe fn make_cell_view(
             let iv = objc2_app_kit::NSImageView::initWithFrame(mtm.alloc(), icon_frame);
             iv.setImage(Some(&img));
             tcv.addSubview(&iv);
-            20.0_f32
+            20.0
         } else { 2.0 }
     } else { 2.0 };
-    // Position text field after the icon.
-    let _ = text_x; // NSTextField auto-sizes; frame set at cell layout
+    // FR-011: position the text field to the right of the icon so they don't overlap.
+    // NSTableCellView auto-resizes its subviews; set a frame with the correct origin.
+    let text_frame = NSRect::new(NSPoint::new(text_x as f64, 0.0), NSSize::new(0.0, 0.0));
+    unsafe { tf.setFrame(text_frame); }
     tcv.setTextField(Some(&tf));
     tcv.addSubview(&tf);
     Some(Retained::cast(tcv))
@@ -256,6 +268,12 @@ declare_class!(
             }
             drop(model);
             if !selected_ids.is_empty() {
+                // FR-009: write selection back to the model so filter_to and update_node are effective.
+                {
+                    let mut m = inner.model.borrow_mut();
+                    m.selection.selected = selected_ids.clone();
+                    m.selection.anchor = selected_ids.first().copied();
+                }
                 rn_core::dispatch_event(Event {
                     source: self.ivars().source,
                     handler,

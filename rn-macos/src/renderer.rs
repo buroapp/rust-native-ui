@@ -1916,12 +1916,22 @@ fn create_node(
                 ov.setUsesAlternatingRowBackgroundColors(false);
             }
             // Create data source + delegate.
-            let sources = crate::tree::make_tree_sources(
+            let mut sources = crate::tree::make_tree_sources(
                 mtm, model, node_id, handler_select, handler_activate,
             );
             unsafe {
                 ov.setDataSource(Some(ProtocolObject::from_ref(&*sources.data)));
                 ov.setDelegate(Some(ProtocolObject::from_ref(&*sources.delegate)));
+                // FR-018: wire doubleAction to a ButtonTarget for OnActivate on tree.
+                if let Some(h) = handler_activate {
+                    let activate_target = ButtonTarget::with_availability(
+                        mtm, h, node_id, rn_core::data::AvailabilityRule::Always,
+                    );
+                    ov.setDoubleAction(Some(objc2::sel!(fire:)));
+                    let obj: &AnyObject = &activate_target;
+                    ov.setTarget(Some(obj));
+                    sources.activate = Some(Retained::cast(activate_target));
+                }
             }
             // Expand all rows that were initially marked expanded.
             unsafe { ov.expandItem_expandChildren(None, true); }
