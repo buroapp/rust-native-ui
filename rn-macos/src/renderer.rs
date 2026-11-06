@@ -1215,22 +1215,76 @@ fn create_node(
             let has_icon = props.contains_key(&PropKey::IconName);
             let mut text_x: f64 = 12.0;
 
-            // Leading icon tile
+            // Leading icon. With IconColor set, this is a Settings-style
+            // colored tile (squircle, or a round avatar when IconShape is
+            // "circle" — the Apple Account/Family rows); without it, a bare
+            // template glyph, for rows that don't carry a brand color.
             if let Some(PropValue::String(icon_name)) = props.get(&PropKey::IconName) {
-                let tile_size: f64 = 26.0;
-                let tile_frame = NSRect::new(
-                    NSPoint::new(12.0, (44.0 - tile_size) / 2.0),
-                    NSSize::new(tile_size, tile_size),
+                let tint = match props.get(&PropKey::IconColor) {
+                    Some(PropValue::String(s)) => Some(s.clone()),
+                    _ => None,
+                };
+                let is_circle = matches!(
+                    props.get(&PropKey::IconShape),
+                    Some(PropValue::String(s)) if s == "circle"
                 );
-                let iv: Retained<NSImageView> =
-                    unsafe { NSImageView::initWithFrame(mtm.alloc(), tile_frame) };
-                let ns_name = NSString::from_str(icon_name);
-                if let Some(img) = unsafe {
-                    NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
-                } {
-                    unsafe { iv.setImage(Some(&img)) }
+                let tile_size: f64 = if is_circle { 32.0 } else { 26.0 };
+                let tile_origin = NSPoint::new(12.0, (44.0 - tile_size) / 2.0);
+
+                if let Some(tint_name) = tint {
+                    let tile = unsafe {
+                        NSBox::initWithFrame(
+                            mtm.alloc(),
+                            NSRect::new(tile_origin, NSSize::new(tile_size, tile_size)),
+                        )
+                    };
+                    unsafe {
+                        tile.setBoxType(NSBoxType::NSBoxCustom);
+                        tile.setCornerRadius(if is_circle { tile_size / 2.0 } else { 6.0 });
+                        tile.setFillColor(&crate::renderer::icon_tint(&tint_name));
+                        tile.setBorderWidth(0.0);
+                        tile.setContentViewMargins(NSSize::new(0.0, 0.0));
+                    }
+                    let inner = NSRect::new(
+                        NSPoint::new(tile_size * 0.22, tile_size * 0.22),
+                        NSSize::new(tile_size * 0.56, tile_size * 0.56),
+                    );
+                    let glyph: Retained<NSImageView> = unsafe {
+                        let v = NSImageView::initWithFrame(mtm.alloc(), inner);
+                        v.setImageScaling(objc2_app_kit::NSImageScaling::NSImageScaleProportionallyUpOrDown);
+                        v
+                    };
+                    let ns_name = NSString::from_str(icon_name);
+                    if let Some(img) = unsafe {
+                        NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
+                    } {
+                        unsafe {
+                            img.setTemplate(true);
+                            glyph.setImage(Some(&img));
+                            glyph.setContentTintColor(Some(&NSColor::whiteColor()));
+                        }
+                    }
+                    unsafe {
+                        if let Some(cv) = tile.contentView() {
+                            cv.addSubview(&glyph);
+                        }
+                    }
+                    unsafe { row.addSubview(&tile) };
+                } else {
+                    let iv: Retained<NSImageView> = unsafe {
+                        NSImageView::initWithFrame(
+                            mtm.alloc(),
+                            NSRect::new(tile_origin, NSSize::new(tile_size, tile_size)),
+                        )
+                    };
+                    let ns_name = NSString::from_str(icon_name);
+                    if let Some(img) = unsafe {
+                        NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
+                    } {
+                        unsafe { iv.setImage(Some(&img)) }
+                    }
+                    unsafe { row.addSubview(&iv) };
                 }
-                unsafe { row.addSubview(&iv) };
                 text_x = 12.0 + tile_size + 12.0;
             }
 
@@ -2286,6 +2340,44 @@ fn create_node(
         }
 
         // ------------------------------------------------------------------
+        // BackForwardControl — the paired nav pill at the top-left of a
+        // System Settings-style content pane. A real NSSegmentedControl,
+        // momentary tracking, two chevron segments; wired to OnPress per
+        // segment via a tiny target that reports which side fired.
+        // ------------------------------------------------------------------
+        ComponentKind::BackForwardControl => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(50.0, 24.0));
+            let sc: Retained<NSSegmentedControl> = unsafe {
+                let s = NSSegmentedControl::initWithFrame(mtm.alloc(), frame);
+                s.setSegmentCount(2);
+                s.setTrackingMode(objc2_app_kit::NSSegmentSwitchTracking::Momentary);
+                for (i, name) in ["chevron.left", "chevron.right"].iter().enumerate() {
+                    if let Some(img) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                        &NSString::from_str(name),
+                        None,
+                    ) {
+                        s.setImage_forSegment(Some(&img), i as isize);
+                    }
+                    s.setWidth_forSegment(24.0, i as isize);
+                }
+                s
+            };
+            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnPress) {
+                let target = ButtonTarget::new(mtm, *h, node_id);
+                unsafe {
+                    let obj: &AnyObject = &target;
+                    sc.setTarget(Some(obj));
+                    sc.setAction(Some(sel!(fire:)));
+                }
+                stash_delegate(node_id, DelegateHandle::Button(target));
+            }
+            attach_to_parent(state, parent_id, &sc);
+            state.nodes.insert(node_id, NativeHandle::SegmentedControlWidget(sc));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        // ------------------------------------------------------------------
         // SearchBar — NSSearchField (FR-024)
         // ------------------------------------------------------------------
         ComponentKind::SearchBar => {
@@ -2930,20 +3022,29 @@ fn populate_sidebar(state_cell: &Rc<RefCell<RendererState>>, pane_id: NodeId, pa
     };
     let outline: &NSOutlineView = unsafe { &*(Retained::as_ptr(&doc) as *const NSOutlineView) };
 
-    // A SearchBar declared inside the sidebar lives above the rows, like the
-    // real Settings search field — not among the scrollable rows. Detach the
-    // tree-built field, pin it under the titlebar band, and inset the document
-    // so no row scrolls under it.
-    let search_info = {
+    // SearchBar/ListTile rows declared inside the sidebar are pinned above
+    // the outline, like the real Settings search field + Apple Account +
+    // Family cards — not among the scrollable items. Detach the tree-built
+    // views, stack them top-down under the titlebar band, and inset the
+    // document so no row scrolls under them.
+    let pinned: Vec<(Retained<NSView>, f64)> = {
         let state = state_cell.borrow();
         let children = state.shadow.get(&pane_id).map(|s| s.children.clone()).unwrap_or_default();
-        find_sidebar_search(&state, &children).and_then(|(sid, _props)| {
-            let handle = state.nodes.get(&sid)?;
-            match handle {
-                NativeHandle::SearchBarWidget(sf) => Some(sf.clone()),
-                _ => None,
-            }
-        })
+        find_pinned_sidebar_views(&state, &children)
+            .into_iter()
+            .filter_map(|nid| {
+                let handle = state.nodes.get(&nid)?;
+                match handle {
+                    NativeHandle::SearchBarWidget(sf) => {
+                        Some((unsafe { Retained::cast::<NSView>(sf.clone()) }, 26.0))
+                    }
+                    NativeHandle::ListTileWidget(row) => {
+                        Some((row.clone(), 44.0))
+                    }
+                    _ => None,
+                }
+            })
+            .collect()
     };
 
     let model = SidebarModel::new(mtm, data, initial_selected_row);
@@ -2957,24 +3058,49 @@ fn populate_sidebar(state_cell: &Rc<RefCell<RendererState>>, pane_id: NodeId, pa
             outline.selectRowIndexes_byExtendingSelection(&set, false);
         }
     }
-    if let Some(sf) = search_info {
+    if !pinned.is_empty() {
         let bounds = scroll.frame();
         let safe_top = unsafe { scroll.safeAreaInsets() }.top;
-        let field_h = 26.0_f64;
         let pad = 6.0_f64;
+        // The sidebar's NSScrollView is a flipped view (y=0 at the top,
+        // growing down) — the usual AppKit convention is bottom-left origin,
+        // but ours sets isFlipped so row/document math reads top-down like
+        // everything else in this renderer. Stack the pinned band the same
+        // way: start just below the titlebar safe area and grow downward.
+        let mut y = safe_top + pad;
+        for (view, height) in &pinned {
+            unsafe {
+                view.removeFromSuperview();
+                view.setFrame(NSRect::new(
+                    NSPoint::new(pad, y),
+                    NSSize::new(bounds.size.width - pad * 2.0, *height),
+                ));
+                view.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
+                scroll.addSubview(view);
+            }
+            y += height;
+        }
+        // A hairline separator between the pinned header band and the item
+        // list, the way the real Settings sidebar breaks after the account
+        // cards.
+        let sep_y = y + 4.0;
+        let sep = unsafe {
+            NSBox::initWithFrame(
+                mtm.alloc(),
+                NSRect::new(NSPoint::new(pad, sep_y), NSSize::new(bounds.size.width - pad * 2.0, 1.0)),
+            )
+        };
         unsafe {
-            sf.removeFromSuperview();
-            sf.setFrame(NSRect::new(
-                NSPoint::new(pad, bounds.size.height - safe_top - pad - field_h),
-                NSSize::new(bounds.size.width - pad * 2.0, field_h),
-            ));
-            sf.setAutoresizingMask(
-                NSAutoresizingMaskOptions::NSViewWidthSizable
-                    | NSAutoresizingMaskOptions::NSViewMinYMargin,
-            );
-            scroll.addSubview(&sf);
+            sep.setBoxType(NSBoxType::NSBoxCustom);
+            sep.setFillColor(&NSColor::separatorColor());
+            sep.setBorderWidth(0.0);
+            sep.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
+            scroll.addSubview(&sep);
+        }
+        unsafe {
+            scroll.setAutomaticallyAdjustsContentInsets(false);
             scroll.setContentInsets(NSEdgeInsets {
-                top: safe_top + pad + field_h + 4.0,
+                top: sep_y + 8.0,
                 left: 0.0,
                 bottom: 0.0,
                 right: 0.0,
@@ -3036,24 +3162,22 @@ fn build_sidebar_data(state: &RendererState, sidebar_id: NodeId) -> (SidebarData
     (SidebarData { entries }, selected_row)
 }
 
-/// Find a SearchBar anywhere under the sidebar. The reconciler already built
-/// its NSSearchField; populate_sidebar lifts it into the scroll view's header
-/// (fixed above the rows, like the real Settings search) and hides the
-/// in-tree copy so taffy layout can't double-draw it.
-fn find_sidebar_search(
-    state: &RendererState,
-    children: &[NodeId],
-) -> Option<(NodeId, Props)> {
+/// Collect every SearchBar/ListTile descendant of a sidebar, in tree order.
+/// These are "pinned" rows — the search field and Apple Account/Family
+/// cards real Settings keeps fixed above the scrolling item list — and
+/// `populate_sidebar` stacks their already-built native views into a
+/// header band instead of letting them scroll with the outline.
+fn find_pinned_sidebar_views(state: &RendererState, children: &[NodeId]) -> Vec<NodeId> {
+    let mut found = Vec::new();
     for &child in children {
         let Some(shadow) = state.shadow.get(&child) else { continue };
-        if shadow.kind == ComponentKind::SearchBar {
-            return Some((child, shadow.props.clone()));
+        if matches!(shadow.kind, ComponentKind::SearchBar | ComponentKind::ListTile) {
+            found.push(child);
+            continue;
         }
-        if let Some(found) = find_sidebar_search(state, &shadow.children) {
-            return Some(found);
-        }
+        found.extend(find_pinned_sidebar_views(state, &shadow.children));
     }
-    None
+    found
 }
 
 
@@ -3273,6 +3397,7 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::Badge => (Some(60.0), Some(20.0)),
         ComponentKind::Skeleton => (None, Some(20.0)),
         ComponentKind::SegmentedControl => (Some(220.0), Some(28.0)),
+        ComponentKind::BackForwardControl => (Some(50.0), Some(24.0)),
         // A search field with no width collapses to its two-point content minimum
         // in a crowded toolbar — it was invisible in the Finder demo.
         ComponentKind::SearchBar => (Some(160.0), Some(28.0)),
@@ -3337,7 +3462,10 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
             // give it a second, competing rect.
             .filter(|c| {
                 !(shadow.kind == ComponentKind::Sidebar
-                    && state.shadow.get(*c).is_some_and(|s| s.kind == ComponentKind::SearchBar))
+                    && state.shadow.get(*c).is_some_and(|s| matches!(
+                        s.kind,
+                        ComponentKind::SearchBar | ComponentKind::ListTile
+                    )))
             })
             .filter_map(|c| build_spec(state, *c))
             .collect()

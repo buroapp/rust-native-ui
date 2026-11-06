@@ -108,6 +108,9 @@ pub enum ComponentKind {
     /// Phase A: Native App Foundation
     Table,
     Tree,
+    /// A paired back/forward navigation control (NSSegmentedControl), the
+    /// pill at the top-left of a System Settings-style content pane.
+    BackForwardControl,
 }
 
 impl ComponentKind {
@@ -178,12 +181,13 @@ impl ComponentKind {
         // Phase A
         ComponentKind::Table,
         ComponentKind::Tree,
+        ComponentKind::BackForwardControl,
     ];
 
     /// Number of distinct component kinds. `ComponentKind::ALL.len()` must equal
     /// this; a test enforces it so a new variant cannot be added without
     /// appearing in `ALL`, which is what forces backends to implement it.
-    pub const COUNT: usize = 62;
+    pub const COUNT: usize = 63;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -222,6 +226,9 @@ pub enum PropKey {
     EmptyText,
     MultiSelect,
     IconColor,
+    /// "circle" renders a leading icon tile as a round avatar instead of a
+    /// squircle — the Apple Account/Family rows at the top of a sidebar.
+    IconShape,
     TableModelKey,
     TreeModelKey,
     OnActivate,

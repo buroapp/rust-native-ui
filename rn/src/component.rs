@@ -104,6 +104,13 @@ impl ComponentBuilder {
         self.prop(PropKey::IconColor, PropValue::String(color.into()))
     }
 
+    /// "circle" renders a `ListTile`'s leading icon tile as a round avatar
+    /// instead of a squircle — the Apple Account/Family rows at the top of
+    /// a sidebar.
+    pub fn icon_shape(self, shape: impl Into<String>) -> Self {
+        self.prop(PropKey::IconShape, PropValue::String(shape.into()))
+    }
+
     pub fn enabled(self, enabled: bool) -> Self {
         self.prop(PropKey::Enabled, PropValue::Bool(enabled))
     }

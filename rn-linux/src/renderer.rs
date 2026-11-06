@@ -88,5 +88,6 @@ fn assert_all_kinds_handled(kind: ComponentKind) {
         ComponentKind::Sheet => {}
         ComponentKind::Table => {}
         ComponentKind::Tree => {}
+        ComponentKind::BackForwardControl => {}
     }
 }

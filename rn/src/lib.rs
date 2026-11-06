@@ -576,6 +576,15 @@ pub fn list_tile(title: impl Into<String>) -> ComponentBuilder {
         .flex(1.0)
 }
 
+/// Start building a `BackForwardControl` — the paired nav pill at the
+/// top-left of a System Settings-style content pane (a real two-segment
+/// `NSSegmentedControl`, momentary tracking). `on_press`'s event payload
+/// identifies which segment fired.
+pub fn back_forward_control(on_press: HandlerId) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::BackForwardControl)
+        .prop(PropKey::OnPress, PropValue::HandlerRef(on_press))
+}
+
 /// Start building a `Scaffold` — top-level macOS window structure that stacks
 /// a title bar, toolbar, and content area around a sidebar/pane layout.
 pub fn scaffold() -> ComponentBuilder {

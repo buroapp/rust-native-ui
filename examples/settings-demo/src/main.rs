@@ -1,7 +1,12 @@
-//! settings-demo — macOS System Settings-style app.
+//! settings-demo — macOS System Settings-style app, pixel-level pass.
 //!
-//! Sidebar: search field pinned on top, labeled groups, colored SF Symbol
-//! glyphs per row, blue selection. Content switches on selection.
+//! Sidebar: pinned search field, then an Apple Account card and a Family
+//! card (native avatar tiles + two-line text), then a flat, continuous,
+//! unlabeled item list — the way the real Settings sidebar is actually
+//! laid out (no group headers). Content pane: back/forward nav pill,
+//! large colored header tile, grouped cards whose rows carry small
+//! colored icon tiles, exactly like About/Software Update/Storage do in
+//! the real app.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -47,41 +52,46 @@ fn main() -> Result<(), rn::RnError> {
         if let rn::EventPayload::Index(i) = e.payload { let _ = tx.send(UpdateMessage::new(Msg::Appearance(i))); }
     }); }
 
+    // Visual-only in this demo: no navigation history yet, so these don't
+    // move the selection, but the real pill — a genuine NSSegmentedControl
+    // wrapped as rn::back_forward_control() — sits in the content header.
+    let nav_id = HandlerId::new();
+    rn::on(nav_id, |_| {});
+
     let search_id = HandlerId::new();
-    { rn::on(search_id, |_| {}); }
+    rn::on(search_id, |_| {});
 
-    // (label, SF Symbol, tile tint) — names and colors mirror real Settings.
+    let account_id = HandlerId::new();
+    rn::on(account_id, |_| {});
+
+    let family_id = HandlerId::new();
+    rn::on(family_id, |_| {});
+
+    // (label, SF Symbol, tile tint) — names, order, and colors mirror the
+    // real Settings sidebar list.
     let categories: &[(&str, &str, &str)] = &[
-        ("General",            "gearshape",              "gray"),
-        ("Wi-Fi",              "wifi",                   "blue"),
-        ("Bluetooth",          "wave.3.right",           "blue"),
-        ("Network",            "globe",                  "blue"),
-        ("Notifications",      "bell.badge",             "red"),
-        ("Sound",              "speaker.wave.2",         "pink"),
-        ("Focus",              "moon.fill",              "indigo"),
-        ("Screen Time",        "hourglass",              "blue"),
-        ("Lock Screen",        "lock",                   "gray"),
-        ("Appearance",         "paintpalette",           "teal"),
-        ("Accessibility",      "figure.wave",            "blue"),
-        ("Battery",            "battery.100",            "green"),
-        ("Privacy & Security", "lock.shield",            "blue"),
-        ("Desktop & Dock",     "menubar.dock.rectangle", "blue"),
-        ("Displays",           "display",                "gray"),
-        ("Wallpaper",          "photo",                  "teal"),
-        ("Siri & Spotlight",   "mic",                    "purple"),
-        ("Keyboard",           "keyboard",               "gray"),
-        ("Mouse",              "computermouse",          "gray"),
-        ("Trackpad",           "trackpad",               "gray"),
-        ("Printers & Scanners","printer",                "gray"),
-    ];
-
-    // Sidebar grouping: (section label, category indices). Empty label = no header.
-    let groups: &[(&str, &[usize])] = &[
-        ("",         &[0]),
-        ("Network",  &[1, 2, 3]),
-        ("System",   &[4, 5, 6, 7, 8, 11, 12]),
-        ("Look",     &[9, 10, 13, 15]),
-        ("Hardware", &[14, 16, 17, 18, 19, 20]),
+        ("General",             "gearshape",              "gray"),
+        ("Wi-Fi",               "wifi",                   "blue"),
+        ("Bluetooth",           "wave.3.right",           "blue"),
+        ("Network",             "globe",                  "blue"),
+        ("Notifications",       "bell.badge",             "red"),
+        ("Sound",               "speaker.wave.2",         "pink"),
+        ("Focus",               "moon.fill",              "indigo"),
+        ("Screen Time",         "hourglass",              "blue"),
+        ("Lock Screen",         "lock",                    "gray"),
+        ("Appearance",          "paintpalette",           "teal"),
+        ("Accessibility",       "figure.wave",            "blue"),
+        ("Control Center",      "switch.2",               "gray"),
+        ("Siri & Spotlight",    "mic",                    "purple"),
+        ("Privacy & Security",  "lock.shield",             "blue"),
+        ("Desktop & Dock",      "menubar.dock.rectangle", "blue"),
+        ("Displays",            "display",                "gray"),
+        ("Wallpaper",           "photo",                   "teal"),
+        ("Battery",             "battery.100",             "green"),
+        ("Keyboard",            "keyboard",                "gray"),
+        ("Mouse",               "computermouse",           "gray"),
+        ("Trackpad",            "trackpad",                "gray"),
+        ("Printers & Scanners", "printer",                 "gray"),
     ];
 
     let mut cat_ids: Vec<HandlerId> = Vec::new();
@@ -101,36 +111,58 @@ fn main() -> Result<(), rn::RnError> {
                 selected: 0, wifi: true, bluetooth: true, appearance: 0,
             });
 
-            // ---- Sidebar: search on top, then labeled groups of items ----
-            let mut sidebar_items: Vec<rn::Component> = Vec::new();
-            for (label, idxs) in groups {
-                if !label.is_empty() {
-                    sidebar_items.push(rn::sidebar_section(*label).build());
-                }
-                for &i in *idxs {
-                    let (lbl, icon, color) = categories[i];
-                    sidebar_items.push(
-                        rn::sidebar_item(lbl, cat_ids[i])
-                            .icon(icon)
-                            .icon_color(color)
-                            .prop(PropKey::Selected, PropValue::Bool(i == s.selected))
-                            .build(),
-                    );
-                }
-            }
+            // ---- Sidebar ----
+            // Pinned header: search, then Apple Account + Family cards
+            // (native ListTile rows with a round avatar tile, not a
+            // sidebar row — these don't scroll with the item list).
+            // Below that: one continuous flat list, no group labels —
+            // that is how System Settings actually lays its sidebar out.
+            let account_row = rn::list_tile("Evgenii Utkin")
+                .prop(PropKey::Subtitle, PropValue::String("Apple Account".into()))
+                .prop(PropKey::IconName, PropValue::String("person.crop.circle.fill".into()))
+                .icon_color("gray")
+                .icon_shape("circle")
+                .prop(PropKey::ShowChevron, PropValue::Bool(true))
+                .prop(PropKey::OnPress, PropValue::HandlerRef(account_id))
+                .build();
+
+            let family_row = rn::list_tile("Family")
+                .prop(PropKey::IconName, PropValue::String("person.2.circle.fill".into()))
+                .icon_color("orange")
+                .icon_shape("circle")
+                .prop(PropKey::ShowChevron, PropValue::Bool(true))
+                .prop(PropKey::OnPress, PropValue::HandlerRef(family_id))
+                .build();
+
+            let sidebar_items: Vec<rn::Component> = categories
+                .iter()
+                .enumerate()
+                .map(|(i, (lbl, icon, color))| {
+                    rn::sidebar_item(*lbl, cat_ids[i])
+                        .icon(*icon)
+                        .icon_color(*color)
+                        .prop(PropKey::Selected, PropValue::Bool(i == s.selected))
+                        .build()
+                })
+                .collect();
 
             let sidebar = rn::sidebar()
-                .prop(PropKey::SidebarWidth, PropValue::F32(220.0))
-                .child(rn::search_bar("Search settings...", search_id).build())
+                .prop(PropKey::SidebarWidth, PropValue::F32(230.0))
+                .child(rn::search_bar("Search", search_id).build())
+                .child(account_row)
+                .child(family_row)
                 .children(sidebar_items)
                 .build();
 
-            // ---- Content (switches by selection) ----
+            // ---- Content ----
             let (page_title, page_icon, page_color) = categories[s.selected];
 
-            let make_row = |title: &str, icon: &str| {
+            // Content-row icons use the same small colored tile treatment
+            // the real app uses for About/Software Update/Storage/etc.
+            let make_row = |title: &str, icon: &str, color: &str| {
                 rn::list_tile(title)
                     .prop(PropKey::IconName, PropValue::String(icon.into()))
+                    .icon_color(color)
                     .prop(PropKey::ShowChevron, PropValue::Bool(true))
                     .build()
             };
@@ -145,6 +177,8 @@ fn main() -> Result<(), rn::RnError> {
             };
 
             let mut page_content = rn::vstack().padding(20.0).gap(12.0).flex(1.0)
+                // Back/forward pill, top-left — a real NSSegmentedControl.
+                .child(rn::back_forward_control(nav_id).build())
                 .child(
                     rn::hstack().gap(10.0).align_center()
                         .child(rn::image(page_icon).icon_color(page_color).build())
@@ -158,21 +192,21 @@ fn main() -> Result<(), rn::RnError> {
             page_content = match s.selected {
                 0 => page_content
                     .child(rn::grouped_section()
-                        .child(make_row("About", "info.circle"))
+                        .child(make_row("About", "info.circle", "gray"))
                         .child(rn::divider())
-                        .child(make_row("Software Update", "arrow.triangle.2.circlepath"))
+                        .child(make_row("Software Update", "arrow.triangle.2.circlepath", "gray"))
                         .child(rn::divider())
-                        .child(make_row("Storage", "internaldrive"))
+                        .child(make_row("Storage", "internaldrive", "gray"))
                         .build())
                     .child(rn::grouped_section()
-                        .child(make_row("AirDrop & Continuity", "antenna.radiowaves.left.and.right"))
+                        .child(make_row("AirDrop & Continuity", "antenna.radiowaves.left.and.right", "blue"))
                         .build())
                     .child(rn::grouped_section()
-                        .child(make_row("Date & Time", "clock"))
+                        .child(make_row("Date & Time", "clock", "blue"))
                         .child(rn::divider())
-                        .child(make_row("Language & Region", "globe"))
+                        .child(make_row("Language & Region", "globe", "blue"))
                         .child(rn::divider())
-                        .child(make_row("Sharing", "square.and.arrow.up"))
+                        .child(make_row("Sharing", "square.and.arrow.up", "blue"))
                         .build()),
                 9 => page_content
                     .child(rn::grouped_section()
@@ -187,18 +221,18 @@ fn main() -> Result<(), rn::RnError> {
                         )
                         .build())
                     .child(rn::grouped_section()
-                        .child(make_row("Accent Color", "paintpalette"))
+                        .child(make_row("Accent Color", "paintpalette", "teal"))
                         .child(rn::divider())
-                        .child(make_row("Highlight Color", "circle.fill"))
+                        .child(make_row("Highlight Color", "circle.fill", "pink"))
                         .build()),
                 1 => page_content
                     .child(rn::grouped_section()
                         .child(make_toggle_row("Wi-Fi", s.wifi, wifi_id))
                         .build())
                     .child(rn::grouped_section()
-                        .child(make_row("My Network", "wifi.circle.fill"))
+                        .child(make_row("My Network", "wifi.circle.fill", "blue"))
                         .child(rn::divider())
-                        .child(make_row("Other Networks...", "wifi.exclamationmark"))
+                        .child(make_row("Other Networks...", "wifi.exclamationmark", "gray"))
                         .build()),
                 2 => page_content
                     .child(rn::grouped_section()
@@ -209,6 +243,7 @@ fn main() -> Result<(), rn::RnError> {
                         .child(make_row(
                             &format!("{page_title} settings coming soon"),
                             "ellipsis.circle",
+                            "gray",
                         ))
                         .build()),
             };
@@ -221,7 +256,7 @@ fn main() -> Result<(), rn::RnError> {
                 rn::window()
                     .modern(true)
                     .title("Settings")
-                    .size(760.0, 560.0)
+                    .size(780.0, 580.0)
                     .on_close(close_id)
                     .child(
                         rn::hstack().gap(0.0).flex(1.0)

@@ -596,6 +596,10 @@ fn back_button_demos(ids: &mut Ids) -> Vec<Demo> {
     vec![demo("Chevron left", rn::back_button(ids.take()).build())]
 }
 
+fn back_forward_control_demos(ids: &mut Ids) -> Vec<Demo> {
+    vec![demo("Nav pill", rn::back_forward_control(ids.take()).build())]
+}
+
 fn disclosure_button_demos(ids: &mut Ids) -> Vec<Demo> {
     vec![demo(
         "Toggle",
@@ -735,6 +739,7 @@ pub const CATALOG: &[Entry] = &[
 
     Entry { category: "Buttons", name: "IconButton", summary: "Icon-only button", build: icon_button_demos },
     Entry { category: "Buttons", name: "BackButton", summary: "Navigation chevron", build: back_button_demos },
+    Entry { category: "Buttons", name: "BackForwardControl", summary: "Paired nav pill (NSSegmentedControl)", build: back_forward_control_demos },
     Entry { category: "Buttons", name: "DisclosureButton", summary: "Show/hide toggle", build: disclosure_button_demos },
     Entry { category: "Buttons", name: "HelpButton", summary: "Contextual help", build: help_button_demos },
 
