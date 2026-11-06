@@ -866,7 +866,15 @@ fn create_node(
         // Image (NSImageView with SF Symbol)
         // ------------------------------------------------------------------
         ComponentKind::Image => {
-            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(32.0, 32.0));
+            // IconColor turns the image into a System Settings header tile:
+            // a colored rounded square with the glyph drawn white inside it.
+            let icon_tint = match props.get(&PropKey::IconColor) {
+                Some(PropValue::String(s)) => Some(s.clone()),
+                _ => None,
+            };
+            let tile_size = 56.0;
+            let (w, h) = if icon_tint.is_some() { (tile_size, tile_size) } else { (32.0, 32.0) };
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w, h));
             let image_view: Retained<NSImageView> = unsafe {
                 let v = NSImageView::initWithFrame(mtm.alloc(), frame);
                 // Without this the image draws at its natural size inside whatever
@@ -888,10 +896,57 @@ fn create_node(
                     unsafe { image_view.setImage(Some(&img)) };
                 }
             }
-            attach_to_parent(state, parent_id, &image_view);
-            state.nodes.insert(node_id, NativeHandle::Image(image_view));
-            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
-            register_child(state, parent_id, node_id);
+            if let Some(tint_name) = icon_tint {
+                let box_frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(tile_size, tile_size));
+                let tile = unsafe { NSBox::initWithFrame(mtm.alloc(), box_frame) };
+                unsafe {
+                    tile.setBoxType(NSBoxType::NSBoxCustom);
+                    tile.setCornerRadius(13.0);
+                    tile.setFillColor(&crate::renderer::icon_tint(&tint_name));
+                    tile.setBorderWidth(0.0);
+                    // NSBox insets its content view by default; zeroing the margins
+                    // makes subview frames land exactly where we put them.
+                    tile.setContentViewMargins(NSSize::new(0.0, 0.0));
+                }
+                // Build the glyph view at its final inner frame (20% margin).
+                let inner = NSRect::new(
+                    NSPoint::new(tile_size * 0.2, tile_size * 0.2),
+                    NSSize::new(tile_size * 0.6, tile_size * 0.6),
+                );
+                let glyph: Retained<NSImageView> = unsafe {
+                    let v = NSImageView::initWithFrame(mtm.alloc(), inner);
+                    v.setImageScaling(objc2_app_kit::NSImageScaling::NSImageScaleProportionallyUpOrDown);
+                    v
+                };
+                if let Some(PropValue::String(name)) = props.get(&PropKey::ImageName) {
+                    let img = unsafe {
+                        NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                            &NSString::from_str(name), None,
+                        )
+                    };
+                    if let Some(img) = img {
+                        unsafe { glyph.setImage(Some(&img)) };
+                    }
+                }
+                unsafe {
+                    glyph.setContentTintColor(Some(&NSColor::whiteColor()));
+                    if let Some(cv) = tile.contentView() {
+                        cv.addSubview(&glyph);
+                    }
+                }
+                attach_to_parent(state, parent_id, &tile);
+                state.nodes.insert(node_id, NativeHandle::View(
+                    Retained::into_super(tile),
+                    ContainerInfo { axis: Axis::Vertical, padding: 0.0, gap: 0.0 },
+                ));
+                state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+                register_child(state, parent_id, node_id);
+            } else {
+                attach_to_parent(state, parent_id, &image_view);
+                state.nodes.insert(node_id, NativeHandle::Image(image_view));
+                state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+                register_child(state, parent_id, node_id);
+            }
         }
 
         // ------------------------------------------------------------------
@@ -2922,12 +2977,16 @@ fn build_sidebar_data(state: &RendererState, sidebar_id: NodeId) -> (SidebarData
                     Some(PropValue::String(s)) => Some(s.clone()),
                     _ => None,
                 };
+                let icon_color = match props.get(&PropKey::IconColor) {
+                    Some(PropValue::String(s)) => Some(s.clone()),
+                    _ => None,
+                };
                 let handler = match props.get(&PropKey::OnSelect) {
                     Some(PropValue::HandlerRef(h)) => Some(*h),
                     _ => None,
                 };
                 let is_selected = bool_prop(&props, PropKey::Selected, false);
-                let item = SidebarRow::Item { node_id, label, icon, handler };
+                let item = SidebarRow::Item { node_id, label, icon, icon_color, handler };
                 if let Some(last) = roots.last_mut() {
                     if is_selected {
                         selected = Some((false, last.items.len()));
@@ -3706,7 +3765,7 @@ fn new_document_view(mtm: MainThreadMarker, size: NSSize) -> Retained<NSView> {
 /// One selectable row in a sidebar's source list.
 #[derive(Clone)]
 enum SidebarRow {
-    Item { node_id: NodeId, label: String, icon: Option<String>, handler: Option<HandlerId> },
+    Item { node_id: NodeId, label: String, icon: Option<String>, icon_color: Option<String>, handler: Option<HandlerId> },
 }
 
 /// Flattened sidebar contents the outline view reads. The tree is one level deep:
@@ -3801,12 +3860,12 @@ declare_class!(
             match (MainThreadMarker::new(), decode_item(Some(item))) {
                 (Some(mtm), Some(ItemRef::Section(s))) => {
                     let title = data.roots.get(s).and_then(|sec| sec.title.clone()).unwrap_or_default();
-                    Some(make_sidebar_label(mtm, &title, None, true))
+                    Some(make_sidebar_label(mtm, &title, None, None, true))
                 }
                 (Some(mtm), Some(ItemRef::Row(s, r))) => {
                     match data.roots.get(s).and_then(|sec| sec.items.get(r)) {
-                        Some(SidebarRow::Item { label, icon, .. }) => {
-                            Some(make_sidebar_label(mtm, label, icon.as_deref(), false))
+                        Some(SidebarRow::Item { label, icon, icon_color, .. }) => {
+                            Some(make_sidebar_label(mtm, label, icon.as_deref(), icon_color.as_deref(), false))
                         }
                         _ => None,
                     }
@@ -3876,9 +3935,33 @@ impl SidebarModel {
     }
 }
 
-/// Build a source-list cell: an SF Symbol (optional) and a label. A group row uses
-/// the small-caps secondary style; an item uses the standard label.
-fn make_sidebar_label(mtm: MainThreadMarker, text: &str, icon: Option<&str>, group: bool) -> Retained<NSView> {
+/// Named color tint → NSColor for the System Settings icon tile.
+fn icon_tint(name: &str) -> Retained<NSColor> {
+    unsafe {
+        match name {
+            "blue"   => NSColor::systemBlueColor(),
+            "green"  => NSColor::systemGreenColor(),
+            "red"    => NSColor::systemRedColor(),
+            "orange" => NSColor::systemOrangeColor(),
+            "purple" => NSColor::systemPurpleColor(),
+            "teal"   => NSColor::systemTealColor(),
+            "indigo" => NSColor::systemIndigoColor(),
+            "yellow" => NSColor::systemYellowColor(),
+            "pink"   => NSColor::systemPinkColor(),
+            "brown"  => NSColor::systemBrownColor(),
+            "gray"   => NSColor::systemGrayColor(),
+            _        => NSColor::systemGrayColor(),
+        }
+    }
+}
+
+fn make_sidebar_label(
+    mtm: MainThreadMarker,
+    text: &str,
+    icon: Option<&str>,
+    icon_color: Option<&str>,
+    group: bool,
+) -> Retained<NSView> {
     let container = unsafe {
         NSView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(180.0, 24.0)))
     };
@@ -3887,15 +3970,33 @@ fn make_sidebar_label(mtm: MainThreadMarker, text: &str, icon: Option<&str>, gro
         if let Some(image) = unsafe {
             NSImage::imageWithSystemSymbolName_accessibilityDescription(&NSString::from_str(name), None)
         } {
-            let iv = unsafe {
-                NSImageView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(2.0, 3.0), NSSize::new(18.0, 18.0)))
-            };
-            unsafe {
-                iv.setImage(Some(&image));
-                iv.setContentTintColor(Some(&NSColor::labelColor()));
-                container.addSubview(&iv);
+            match icon_color {
+                // macOS System Settings sidebar: the glyph itself carries the
+                // category color (blue Wi-Fi, green battery, red bell). No tile.
+                Some(tint_name) => {
+                    let iv = unsafe {
+                        NSImageView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(2.0, 3.0), NSSize::new(18.0, 18.0)))
+                    };
+                    unsafe {
+                        iv.setImage(Some(&image));
+                        iv.setContentTintColor(Some(&icon_tint(tint_name)));
+                        container.addSubview(&iv);
+                    }
+                    label_x = 26.0;
+                }
+                // Default label color (toolbars, generic rows).
+                None => {
+                    let iv = unsafe {
+                        NSImageView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(2.0, 3.0), NSSize::new(18.0, 18.0)))
+                    };
+                    unsafe {
+                        iv.setImage(Some(&image));
+                        iv.setContentTintColor(Some(&NSColor::labelColor()));
+                        container.addSubview(&iv);
+                    }
+                    label_x = 26.0;
+                }
             }
-            label_x = 26.0;
         }
     }
     let label = unsafe {

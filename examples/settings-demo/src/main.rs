@@ -47,21 +47,30 @@ fn main() -> Result<(), rn::RnError> {
         if let rn::EventPayload::Index(i) = e.payload { let _ = tx.send(UpdateMessage::new(Msg::Appearance(i))); }
     }); }
 
-    // Each category: (label, SF Symbol icon)
-    let categories: &[(&str, &str)] = &[
-        ("General",        "gearshape"),
-        ("Appearance",     "paintpalette"),
-        ("Privacy & Security", "hand.raised"),
-        ("Notifications",  "bell.badge"),
-        ("Wi-Fi",          "wifi"),
-        ("Bluetooth",      "wave.3.right"),
-        ("Sound",          "speaker.wave.2"),
-        ("Battery",        "battery.100"),
-        ("Displays",       "display"),
-        ("Keyboard",       "keyboard"),
-        ("Trackpad",       "trackpad"),
-        ("Mouse",          "computermouse"),
-        ("Advanced",       "slider.horizontal.3"),
+    // Each category: (label, SF Symbol icon, tile tint) — colors mirror
+    // macOS System Settings' own sidebar.
+    let categories: &[(&str, &str, &str)] = &[
+        ("General",            "gearshape",              "gray"),
+        ("Wi-Fi",              "wifi",                   "blue"),
+        ("Bluetooth",          "wave.3.right",           "blue"),
+        ("Network",            "globe",                  "blue"),
+        ("Notifications",      "bell.badge",             "red"),
+        ("Sound",              "speaker.wave.2",         "pink"),
+        ("Focus",              "moon.fill",              "indigo"),
+        ("Screen Time",        "hourglass",              "blue"),
+        ("Lock Screen",        "lock",                   "gray"),
+        ("Appearance",         "paintpalette",           "teal"),
+        ("Accessibility",      "figure.wave",            "blue"),
+        ("Battery",            "battery.100",            "green"),
+        ("Privacy & Security", "lock.shield",            "blue"),
+        ("Desktop & Dock",     "menubar.dock.rectangle", "blue"),
+        ("Displays",           "display",                "gray"),
+        ("Wallpaper",          "photo",                  "teal"),
+        ("Siri & Spotlight",   "mic",                    "purple"),
+        ("Keyboard",           "keyboard",               "gray"),
+        ("Mouse",              "computermouse",          "gray"),
+        ("Trackpad",           "trackpad",               "gray"),
+        ("Printers & Scanners","printer",                "gray"),
     ];
 
     let mut cat_ids: Vec<HandlerId> = Vec::new();
@@ -85,9 +94,10 @@ fn main() -> Result<(), rn::RnError> {
             let sidebar_items: Vec<rn::Component> = categories
                 .iter()
                 .enumerate()
-                .map(|(i, (lbl, icon))| {
+                .map(|(i, (lbl, icon, color))| {
                     rn::sidebar_item(*lbl, cat_ids[i])
                         .icon(*icon)
+                        .icon_color(*color)
                         .prop(PropKey::Selected, PropValue::Bool(i == s.selected))
                         .build()
                 })
@@ -100,8 +110,8 @@ fn main() -> Result<(), rn::RnError> {
                 .build();
 
             // ---- Content (switches by selection) ----
-            let (page_title, page_icon) = categories[s.selected];
-            let page_desc = page_title; // subhead reuses title for now
+            let (page_title, page_icon, page_color) = categories[s.selected];
+            let page_desc = page_title;
 
             let make_row = |title: &str, icon: &str| {
                 rn::list_tile(title)
@@ -124,7 +134,7 @@ fn main() -> Result<(), rn::RnError> {
                 // Page header
                 .child(
                     rn::hstack().gap(10.0)
-                        .child(rn::image(page_icon).build())
+                        .child(rn::image(page_icon).icon_color(page_color).build())
                         .child(rn::vstack()
                             .child(rn::label(page_title))
                             .child(rn::label(page_desc))
@@ -154,7 +164,7 @@ fn main() -> Result<(), rn::RnError> {
                         .child(make_row("Sharing", "square.and.arrow.up"))
                         .build()),
                 // Appearance
-                1 => page_content
+                9 => page_content
                     .child(rn::grouped_section()
                         .child(
                             rn::vstack().gap(8.0)
@@ -172,7 +182,7 @@ fn main() -> Result<(), rn::RnError> {
                         .child(make_row("Highlight Color", "circle.fill"))
                         .build()),
                 // Wi-Fi
-                4 => page_content
+                1 => page_content
                     .child(rn::grouped_section()
                         .child(make_toggle_row("Wi-Fi", s.wifi, wifi_id))
                         .build())
@@ -182,7 +192,7 @@ fn main() -> Result<(), rn::RnError> {
                         .child(make_row("Other Networks…", "wifi.exclamationmark"))
                         .build()),
                 // Bluetooth
-                5 => page_content
+                2 => page_content
                     .child(rn::grouped_section()
                         .child(make_toggle_row("Bluetooth", s.bluetooth, bt_id))
                         .build()),

@@ -221,6 +221,7 @@ pub enum PropKey {
     Commands,
     EmptyText,
     MultiSelect,
+    IconColor,
     TableModelKey,
     TreeModelKey,
     OnActivate,

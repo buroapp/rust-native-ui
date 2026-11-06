@@ -97,6 +97,13 @@ impl ComponentBuilder {
         self.prop(PropKey::IconName, PropValue::String(name.into()))
     }
 
+    /// Tint for the icon's rounded background tile (System Settings style).
+    /// Named colors: "blue", "green", "red", "orange", "purple", "gray",
+    /// "teal", "indigo".
+    pub fn icon_color(self, color: impl Into<String>) -> Self {
+        self.prop(PropKey::IconColor, PropValue::String(color.into()))
+    }
+
     pub fn enabled(self, enabled: bool) -> Self {
         self.prop(PropKey::Enabled, PropValue::Bool(enabled))
     }
