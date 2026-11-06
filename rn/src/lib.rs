@@ -76,6 +76,16 @@ pub fn label_w(text: impl Into<String>, min_width: f32) -> Component {
         .build()
 }
 
+/// Start building a `Label` as a `ComponentBuilder` — for callers that need
+/// to chain layout props (`.flex()`, `.padding()`, ...) rather than take the
+/// plain `Component` `label()` returns. Without this a Label stuck to its
+/// default 60px minimum width inside a flexible row (e.g. a title next to a
+/// header icon, or a toggle row's leading text) and truncated.
+pub fn label_builder(text: impl Into<String>) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Label)
+        .prop(PropKey::Text, PropValue::String(text.into()))
+}
+
 /// Start building a `Button` component with the given label text.
 pub fn button(label: impl Into<String>) -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::Button).prop(PropKey::Text, PropValue::String(label.into()))

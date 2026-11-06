@@ -26,6 +26,10 @@ fn main() -> Result<(), rn::RnError> {
         wifi: bool,
         bluetooth: bool,
         appearance: i32,
+        allow_notifications: bool,
+        do_not_disturb: bool,
+        require_password: bool,
+        low_power_mode: bool,
     }
 
     let state = Arc::new(Mutex::new(State {
@@ -33,9 +37,16 @@ fn main() -> Result<(), rn::RnError> {
         wifi: true,
         bluetooth: true,
         appearance: 0,
+        allow_notifications: true,
+        do_not_disturb: false,
+        require_password: true,
+        low_power_mode: false,
     }));
 
-    enum Msg { Select(usize), Wifi, Bluetooth, Appearance(i32) }
+    enum Msg {
+        Select(usize), Wifi, Bluetooth, Appearance(i32),
+        AllowNotifications, DoNotDisturb, RequirePassword, LowPowerMode,
+    }
 
     let tx = rn::update_sender();
     let close_id = HandlerId::new();
@@ -66,6 +77,18 @@ fn main() -> Result<(), rn::RnError> {
 
     let family_id = HandlerId::new();
     rn::on(family_id, |_| {});
+
+    let notif_id = HandlerId::new();
+    { let tx = tx.clone(); rn::on(notif_id, move |_| { let _ = tx.send(UpdateMessage::new(Msg::AllowNotifications)); }); }
+
+    let dnd_id = HandlerId::new();
+    { let tx = tx.clone(); rn::on(dnd_id, move |_| { let _ = tx.send(UpdateMessage::new(Msg::DoNotDisturb)); }); }
+
+    let reqpw_id = HandlerId::new();
+    { let tx = tx.clone(); rn::on(reqpw_id, move |_| { let _ = tx.send(UpdateMessage::new(Msg::RequirePassword)); }); }
+
+    let lpm_id = HandlerId::new();
+    { let tx = tx.clone(); rn::on(lpm_id, move |_| { let _ = tx.send(UpdateMessage::new(Msg::LowPowerMode)); }); }
 
     // (label, SF Symbol, tile tint) — names, order, and colors mirror the
     // real Settings sidebar list.
@@ -109,6 +132,8 @@ fn main() -> Result<(), rn::RnError> {
         move || {
             let s = state.lock().map(|g| g.clone()).unwrap_or(State {
                 selected: 0, wifi: true, bluetooth: true, appearance: 0,
+                allow_notifications: true, do_not_disturb: false,
+                require_password: true, low_power_mode: false,
             });
 
             // ---- Sidebar ----
@@ -171,7 +196,7 @@ fn main() -> Result<(), rn::RnError> {
                 rn::hstack()
                     .justify_between()
                     .flex(1.0)
-                    .child(rn::label(title))
+                    .child(rn::label_builder(title).flex(1.0).build())
                     .child(rn::switch(on, id).build())
                     .build()
             };
@@ -182,8 +207,8 @@ fn main() -> Result<(), rn::RnError> {
                 .child(
                     rn::hstack().gap(10.0).align_center()
                         .child(rn::image(page_icon).icon_color(page_color).build())
-                        .child(rn::vstack()
-                            .child(rn::label(page_title))
+                        .child(rn::vstack().flex(1.0)
+                            .child(rn::label_builder(page_title).flex(1.0).build())
                             .build())
                         .build()
                 )
@@ -238,6 +263,74 @@ fn main() -> Result<(), rn::RnError> {
                     .child(rn::grouped_section()
                         .child(make_toggle_row("Bluetooth", s.bluetooth, bt_id))
                         .build()),
+                4 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_toggle_row("Allow Notifications", s.allow_notifications, notif_id))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Messages", "message.fill", "green"))
+                        .child(rn::divider())
+                        .child(make_row("Mail", "envelope.fill", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Calendar", "calendar", "red"))
+                        .child(rn::divider())
+                        .child(make_row("Safari", "safari", "blue"))
+                        .build()),
+                5 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Sound Effects", "speaker.wave.3", "pink"))
+                        .child(rn::divider())
+                        .child(make_row("Alert Volume", "slider.horizontal.3", "pink"))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Output Device", "hifispeaker.fill", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("Input Device", "mic.fill", "gray"))
+                        .build()),
+                6 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_toggle_row("Do Not Disturb", s.do_not_disturb, dnd_id))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Personal", "person.fill", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Work", "briefcase.fill", "orange"))
+                        .child(rn::divider())
+                        .child(make_row("Sleep", "bed.double.fill", "indigo"))
+                        .build()),
+                8 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_toggle_row("Require Password", s.require_password, reqpw_id))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Auto-Lock", "lock.rotation", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("Screen Saver", "sparkles", "indigo"))
+                        .build()),
+                13 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Location Services", "location.fill", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Contacts", "person.crop.circle", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Camera", "camera.fill", "green"))
+                        .child(rn::divider())
+                        .child(make_row("Microphone", "mic.fill", "pink"))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("FileVault", "lock.doc.fill", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Firewall", "shield.lefthalf.filled", "blue"))
+                        .build()),
+                17 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_toggle_row("Low Power Mode", s.low_power_mode, lpm_id))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Battery Health", "heart.text.square.fill", "green"))
+                        .child(rn::divider())
+                        .child(make_row("Battery Percentage", "batteryblock.fill", "green"))
+                        .build()),
                 _ => page_content
                     .child(rn::grouped_section()
                         .child(make_row(
@@ -285,6 +378,10 @@ fn main() -> Result<(), rn::RnError> {
                         Ok(Msg::Wifi)       => { g.wifi = !g.wifi; dirty = true; }
                         Ok(Msg::Bluetooth)  => { g.bluetooth = !g.bluetooth; dirty = true; }
                         Ok(Msg::Appearance(i)) => { g.appearance = i; dirty = true; }
+                        Ok(Msg::AllowNotifications) => { g.allow_notifications = !g.allow_notifications; dirty = true; }
+                        Ok(Msg::DoNotDisturb) => { g.do_not_disturb = !g.do_not_disturb; dirty = true; }
+                        Ok(Msg::RequirePassword) => { g.require_password = !g.require_password; dirty = true; }
+                        Ok(Msg::LowPowerMode) => { g.low_power_mode = !g.low_power_mode; dirty = true; }
                         Err(_) => {}
                     }
                 }
