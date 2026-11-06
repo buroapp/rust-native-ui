@@ -123,6 +123,9 @@ enum NativeHandle {
     TabViewWidget(Retained<NSTabView>),
     /// Row container, its selection pill, and its label.
     SidebarItemWidget(Retained<NSView>),
+    /// Phase A: data-bound surfaces (NSScrollView wrapping NSTableView / NSOutlineView)
+    TableWidget(Retained<NSScrollView>),
+    TreeWidget(Retained<NSScrollView>),
 }
 
 impl NativeHandle {
@@ -155,6 +158,8 @@ impl NativeHandle {
             NativeHandle::SegmentedControlWidget(v) => Some(v),
             NativeHandle::SearchBarWidget(v) => Some(v),
             NativeHandle::SidebarWidget(v) => Some(v),
+            NativeHandle::TableWidget(v) => Some(v),
+            NativeHandle::TreeWidget(v) => Some(v),
             NativeHandle::GroupedSectionWidget(v) => Some(v),
             NativeHandle::SplitViewWidget(v) => Some(v),
             NativeHandle::ToolbarWidget(v) => Some(v),
@@ -1746,6 +1751,26 @@ fn create_node(
             register_child(state, parent_id, node_id);
         }
 
+        // Phase A: table and tree — renderer modules handle the actual construction,
+        // delegated to rn-macos/src/table.rs and rn-macos/src/tree.rs.
+        ComponentKind::Table => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 300.0));
+            let sv = new_scroll_container(mtm, frame, false);
+            attach_to_parent(state, parent_id, &sv);
+            state.nodes.insert(node_id, NativeHandle::TableWidget(sv));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
+        ComponentKind::Tree => {
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 300.0));
+            let sv = new_scroll_container(mtm, frame, false);
+            attach_to_parent(state, parent_id, &sv);
+            state.nodes.insert(node_id, NativeHandle::TreeWidget(sv));
+            state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
+            register_child(state, parent_id, node_id);
+        }
+
         // ------------------------------------------------------------------
         // SidebarSection — small caps group header inside a sidebar
         // ------------------------------------------------------------------
@@ -2833,6 +2858,10 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         // The toolbar is the window's NSToolbar now; it occupies no space in the
         // content tree.
         ComponentKind::Toolbar => (None, Some(0.0)),
+        // Phase A: data-bound surfaces; each occupies one layout node with a default
+        // height that grows to fill its parent via flex_grow wired in build_spec.
+        ComponentKind::Table => (None, Some(300.0)),
+        ComponentKind::Tree => (None, Some(300.0)),
         ComponentKind::ToolbarIconButton => (Some(32.0), Some(28.0)),
         ComponentKind::ToolbarDivider => (Some(1.0), Some(20.0)),
         ComponentKind::ToolbarPopup => (Some(120.0), Some(26.0)),

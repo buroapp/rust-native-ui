@@ -187,6 +187,15 @@ fn prop_reset_value(reference: &PropValue) -> PropValue {
         PropValue::SpacingToken(t) => PropValue::SpacingToken(*t),
         PropValue::RadiusToken(t) => PropValue::RadiusToken(*t),
         PropValue::FontToken(t) => PropValue::FontToken(*t),
+        // Phase A: Native App Foundation
+        PropValue::CommandSet(_) => PropValue::CommandSet(rn_core::data::CommandSet::new()),
+        PropValue::TableModelProp(_) => PropValue::TableModelProp(
+            // Empty model (0 cols, 0 rows) is always valid; bypass the checked
+            // constructor to satisfy the no-unwrap library rule.
+            rn_core::data::TableModel { columns: vec![], rows: vec![],
+                sort: None, selection: rn_core::data::Selection::default() }),
+        PropValue::TreeModelProp(_) => PropValue::TreeModelProp(
+            rn_core::data::TreeModel::new(vec![])),
     }
 }
 

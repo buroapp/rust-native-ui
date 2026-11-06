@@ -15,6 +15,7 @@ members = [
     "examples/mail-demo",
     "examples/storybook",
     "examples/finder-demo",
+    "examples/table-demo",
 ]
 
 [workspace.package]

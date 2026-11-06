@@ -745,6 +745,22 @@ pub const CATALOG: &[Entry] = &[
     Entry { category: "Dialogs", name: "Popover", summary: "Anchored overlay", build: popover_demos },
     Entry { category: "Dialogs", name: "AlertDialog", summary: "Alert with choice", build: alert_dialog_demos },
     Entry { category: "Dialogs", name: "Sheet", summary: "Window-attached modal", build: sheet_demos },
+    Entry {
+        category: "Data",
+        name: "Table",
+        summary: "Sortable, resizable column table",
+        build: |_ids| vec![
+            demo("Table (Phase A in progress)", rn::label("Table renders here once Phase A ships.")),
+        ],
+    },
+    Entry {
+        category: "Data",
+        name: "Tree",
+        summary: "Expandable outline view",
+        build: |_ids| vec![
+            demo("Tree (Phase A in progress)", rn::label("Tree renders here once Phase A ships.")),
+        ],
+    },
 ];
 
 #[cfg(test)]

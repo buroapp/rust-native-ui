@@ -2,6 +2,8 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+pub mod data;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
@@ -103,6 +105,9 @@ pub enum ComponentKind {
     // Batch 6 — dialogs & sheets (macos_ui parity)
     AlertDialog,
     Sheet,
+    /// Phase A: Native App Foundation
+    Table,
+    Tree,
 }
 
 impl ComponentKind {
@@ -170,12 +175,15 @@ impl ComponentKind {
         ComponentKind::ToolbarPopup,
         ComponentKind::AlertDialog,
         ComponentKind::Sheet,
+        // Phase A
+        ComponentKind::Table,
+        ComponentKind::Tree,
     ];
 
     /// Number of distinct component kinds. `ComponentKind::ALL.len()` must equal
     /// this; a test enforces it so a new variant cannot be added without
     /// appearing in `ALL`, which is what forces backends to implement it.
-    pub const COUNT: usize = 60;
+    pub const COUNT: usize = 62;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -349,6 +357,10 @@ pub enum PropValue {
     SpacingToken(SpacingToken),
     RadiusToken(RadiusToken),
     FontToken(FontToken),
+    /// Phase A: Native App Foundation
+    CommandSet(data::CommandSet),
+    TableModelProp(data::TableModel),
+    TreeModelProp(data::TreeModel),
 }
 
 // ---------------------------------------------------------------------------

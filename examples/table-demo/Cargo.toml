@@ -1,0 +1,20 @@
+[package]
+name = "table-demo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "table-demo"
+path = "src/main.rs"
+required-features = ["macos"]
+
+[features]
+macos = ["rn/macos"]
+windows = ["rn/windows"]
+linux = ["rn/linux"]
+
+[dependencies]
+rn = { path = "../../rn" }

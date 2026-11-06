@@ -86,5 +86,7 @@ fn assert_all_kinds_handled(kind: ComponentKind) {
         ComponentKind::ToolbarPopup => {}
         ComponentKind::AlertDialog => {}
         ComponentKind::Sheet => {}
+        ComponentKind::Table => {}
+        ComponentKind::Tree => {}
     }
 }

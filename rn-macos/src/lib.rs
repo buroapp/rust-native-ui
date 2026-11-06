@@ -8,3 +8,6 @@ mod renderer;
 
 #[cfg(target_os = "macos")]
 pub use renderer::MacosRenderer;
+pub(crate) mod commands;
+pub(crate) mod table;
+pub(crate) mod tree;
