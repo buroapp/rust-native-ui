@@ -747,6 +747,7 @@ pub fn toolbar(actions: Vec<ToolbarAction>) -> ComponentBuilder {
 /// let set = CommandSet::new();
 /// let w = window().commands(set).build();
 /// ```
+pub use rn_core::data::ShortcutConflict;
 pub use rn_core::data::{
     AvailabilityRule, Command, CommandId, CommandPlacement, CommandSet,
     ColumnId, FlagId, KeyBinding, Modifiers, RowId,

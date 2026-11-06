@@ -14,15 +14,16 @@ use rn_core::data::{AvailabilityRule, Command, CommandSet, Modifiers};
 
 /// Install the application main menu from a `CommandSet`.
 ///
-/// Scans for duplicate `(key, modifiers)` pairs and prints a warning for each
-/// conflict (FR-006). `targets` is a slice of `(target_obj, command)` pairs.
+/// Scans for duplicate `(key, modifiers)` pairs and returns any
+/// conflicts (FR-006/SC-001). `targets` is a slice of `(target_obj, command)` pairs.
 pub(crate) fn install_main_menu_with_targets(
     mtm: MainThreadMarker,
     _command_set: &CommandSet,
     targets: &[(&AnyObject, &Command)],
-) {
+) -> Vec<rn_core::data::ShortcutConflict> {
     let app = NSApplication::sharedApplication(mtm);
-    // FR-006: detect duplicate shortcuts before wiring.
+    // FR-006: detect duplicate shortcuts and return conflicts to the caller.
+    let mut conflicts: Vec<rn_core::data::ShortcutConflict> = Vec::new();
     {
         let mut seen: std::collections::HashMap<(String, u8), &str> = std::collections::HashMap::new();
         for (_, cmd) in targets {
@@ -33,10 +34,12 @@ pub(crate) fn install_main_menu_with_targets(
                         "ShortcutConflict: '{}' and '{}' share the same binding ({}{:?})",
                         existing, cmd.title, binding.key, binding.modifiers
                     );
-                    eprintln!(
-                        "[rn] ShortcutConflict: '{}' and '{}' share binding ⌘{}",
-                        existing, cmd.title, binding.key
-                    );
+                    conflicts.push(rn_core::data::ShortcutConflict {
+                        a: existing.to_string(),
+                        b: cmd.title.clone(),
+                        key: binding.key.clone(),
+                        modifiers: binding.modifiers,
+                    });
                 } else {
                     seen.insert(key, &cmd.title);
                 }
@@ -85,6 +88,7 @@ pub(crate) fn install_main_menu_with_targets(
     }
 
     app.setMainMenu(Some(&bar));
+    conflicts
 }
 
 fn make_menu(mtm: MainThreadMarker, title: &str) -> Retained<NSMenu> {

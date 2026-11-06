@@ -62,3 +62,17 @@ impl CommandSet {
     pub fn push(&mut self, cmd: Command) { self.0.push(cmd); }
     pub fn commands(&self) -> &[Command] { &self.0 }
 }
+
+/// A shortcut conflict detected when two commands share the same binding.
+/// Returned by `install_main_menu_with_targets` per FR-006/SC-001.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShortcutConflict {
+    /// Title of the first command.
+    pub a: String,
+    /// Title of the second command.
+    pub b: String,
+    /// The conflicting key string.
+    pub key: String,
+    /// The conflicting modifier mask.
+    pub modifiers: Modifiers,
+}

@@ -333,7 +333,28 @@ declare_class!(
             let ov = match notification.object() { Some(o) => o, None => return };
             let ov: &NSOutlineView = &*(Retained::as_ptr(&ov) as *const NSOutlineView);
             let row = ov.selectedRow();
-            if row < 0 { return; }
+            if row < 0 {
+                // Deselect: clear selection in model.
+                let inner = &*self.ivars().inner;
+                inner.model.borrow_mut().selection = None;
+                return;
+            }
+            // FR-016/US3: write selected RowId back to model so it survives refresh.
+            let inner = &*self.ivars().inner;
+            {
+                let snap = inner.snapshot.borrow();
+                // The selected outline row maps to a snapshot index via itemAtRow.
+                let item = ov.itemAtRow(row);
+                if let Some(item) = item {
+                    let num: &NSNumber = &*(Retained::as_ptr(&item) as *const NSNumber);
+                    let idx = num.longLongValue();
+                    if idx >= 0 {
+                        if let Some(node) = snap.get(idx as usize) {
+                            inner.model.borrow_mut().selection = Some(node.id);
+                        }
+                    }
+                }
+            }
             if let Some(h) = self.ivars().handler_select {
                 rn_core::dispatch_event(Event {
                     source: self.ivars().source,
@@ -388,6 +409,28 @@ pub(crate) fn restore_expansion(ov: &NSOutlineView, sources: &TreeSources, ids: 
             }
         }
     }
+}
+
+
+/// Compute the maximum depth of any node in the snapshot (root = depth 0).
+#[allow(dead_code)]
+fn max_depth_in_snapshot(snap: &[FlatNode]) -> usize {
+    let mut depths: Vec<usize> = vec![0; snap.len()];
+    for (i, node) in snap.iter().enumerate() {
+        if node.parent != usize::MAX {
+            depths[i] = depths[node.parent] + 1;
+        }
+    }
+    depths.into_iter().max().unwrap_or(0)
+}
+
+/// Compute max depth directly from TreeNode roots (does not need a built snapshot).
+pub(crate) fn model_max_depth(nodes: &[rn_core::data::TreeNode]) -> usize {
+    fn depth(node: &rn_core::data::TreeNode, current: usize) -> usize {
+        if node.children.is_empty() { current }
+        else { node.children.iter().map(|c| depth(c, current + 1)).max().unwrap_or(current) }
+    }
+    nodes.iter().map(|n| depth(n, 0)).max().unwrap_or(0)
 }
 
 

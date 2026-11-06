@@ -6,7 +6,8 @@ pub mod table;
 pub mod tree;
 
 // Re-export everything consumers need from one place.
-pub use command::{AvailabilityRule, Command, CommandPlacement, CommandSet, KeyBinding, Modifiers};
+pub use command::{AvailabilityRule, Command, CommandPlacement, CommandSet, KeyBinding, Modifiers,
+    ShortcutConflict};
 pub use table::{Selection, SortDescriptor, SortDirection, TableCell, TableColumn, TableModel,
     TableRow, TextAlign};
 pub use tree::{TreeModel, TreeNode};

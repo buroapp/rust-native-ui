@@ -587,7 +587,11 @@ fn create_node(
                         (obj, *cmd)
                     })
                     .collect();
-                crate::commands::install_main_menu_with_targets(mtm, command_set, &target_refs);
+                let conflicts = crate::commands::install_main_menu_with_targets(mtm, command_set, &target_refs);
+                for c in &conflicts {
+                    log::warn!("ShortcutConflict: '{}' and '{}' share binding '{}{}'",
+                        c.a, c.b, c.key, if c.modifiers.0 != 0 { " (with modifiers)" } else { "" });
+                }
                 for (t, _) in pairs { targets.push(t); }
                 stash_delegate(node_id, DelegateHandle::Commands(targets));
             }
@@ -1797,6 +1801,9 @@ fn create_node(
             // Build NSTableView inside a scroll view.
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 300.0));
             let sv = new_scroll_container(mtm, frame, false);
+            // FR-008/edge: enable horizontal scroll so columns hold their minimums when
+            // the window is narrower than the combined minimum column widths.
+            unsafe { sv.setHasHorizontalScroller(true); }
             let tv: Retained<NSTableView> = unsafe {
                 NSTableView::initWithFrame(mtm.alloc(), frame)
             };
@@ -1912,7 +1919,16 @@ fn create_node(
                 col.setWidth(300.0);
                 ov.addTableColumn(&col);
                 ov.setOutlineTableColumn(Some(&col));
-                ov.setIndentationPerLevel(16.0);
+                // FR-015/edge: cap indentation so deep nodes remain readable.
+                // Compute max depth directly from the model (before make_tree_sources).
+                let max_d = crate::tree::model_max_depth(&model.roots);
+                let indent_per_level = if max_d > 6 {
+                    // Cap at 96pt total: deepest level gets at least a few points.
+                    (96.0_f64 / max_d as f64).max(4.0)
+                } else {
+                    16.0
+                };
+                ov.setIndentationPerLevel(indent_per_level);
                 ov.setUsesAlternatingRowBackgroundColors(false);
             }
             // Create data source + delegate.
