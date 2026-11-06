@@ -212,3 +212,22 @@ Phase A is committed and the gate is green.
 - `ComponentKind::COUNT` must equal `ComponentKind::ALL.len()` or the guard test fails — T013 updates both atomically
 - The `completeness-guard` CI job injects `ZzzGuardVariant` and expects a non-exhaustive error; T014 and T015 extend the match rather than adding a catch-all
 - `catalog_covers_every_component_kind` in the storybook test fails if any kind has no catalogue entry; T017 adds placeholders before implementation so the test never goes red during development
+
+## Phase 7: Convergence
+
+**Purpose**: Close gaps identified by `/speckit-converge`. Phase A tasks were marked done but several implementation obligations were missing or partial.
+
+- [ ] T045 [US2] Implement `update_node` arm for `(NativeHandle::TableWidget, PropKey::TableModelKey)` in `rn-macos/src/renderer.rs` — retrieve `DelegateHandle::Table(sources)`, call `update_table_model(sources, new_model)`, call `selection.filter_to(&row_ids)` to drop removed rows, call `reloadData()` on the embedded `NSTableView` per T029 (missing)
+- [ ] T046 [US3] Implement `update_node` arm for `(NativeHandle::TreeWidget, PropKey::TreeModelKey)` in `rn-macos/src/renderer.rs` — capture expanded ids from `sources.inner.model`, call `update_tree_model(sources, new_model)`, call `reloadData()`, call `restore_expansion(ov, &expanded_ids)` per T037 (missing)
+- [ ] T047 [US3] Implement `restore_expansion(ov: &NSOutlineView, ids: &[RowId])` body in `rn-macos/src/tree.rs` — iterate all outline rows, decode each item to a FlatNode RowId, call `expandItem:` when id is in `ids`; call from T046 arm per FR-016 (missing)
+- [ ] T048 [US3] Wire `outlineViewItemDidExpand:` and `outlineViewItemDidCollapse:` in `TreeDelegate` in `rn-macos/src/tree.rs` — decode item to RowId, update the FlatNode `expanded` flag in the snapshot so model stays in sync with user interaction per FR-016 (missing)
+- [ ] T049 [US2/US3] Wire cell icon display in `make_cell_view` (`table.rs`) and `make_tree_cell` (`tree.rs`) — when `cell.icon`/`node.icon` is Some, fetch `NSImage::imageWithSystemSymbolName`, create `NSImageView`, add beside `NSTextField` in the `NSTableCellView` per FR-011 (missing)
+- [ ] T050 [US2] Implement table empty-state: when `model.rows.is_empty()` in the Table `create_node` arm, show a centred `NSTextField` label (default text 'No items', overridable by `PropKey::EmptyText`) overlaid on or above the scroll view per FR-014 (missing)
+- [ ] T051 [US2] Add `--rows N` argument to `examples/table-demo/src/main.rs` using `std::env::args()` — generate N rows with deterministic fake data (default 1000); add a status label that updates with the selected row Name per T031 scope (partial)
+- [ ] T052 [US3] Add a Refresh button and selection label to the tree pane in `examples/table-demo/src/main.rs` — Refresh replaces the model with same ids and new labels, proving expansion state survives; label shows selected node label per T039 scope (missing)
+- [ ] T053 [US1] Implement `AvailabilityRule::WhenFlag` menu validation: add `NSMenuDelegate::menuWillOpen:` on the bar (or `validateMenuItem:` on `ButtonTarget`) that re-evaluates each item's enabled state from current application flags per FR-003/FR-004 (missing)
+- [ ] T054 [US1] Add duplicate-shortcut detection in `install_main_menu_with_targets` — scan commands for duplicate `(key, modifiers)` pairs before installing and emit a `ShortcutConflict` warning per FR-006 (missing)
+- [ ] T055 [US2/US3] Wire `OnActivate` dispatch — set `doubleAction`/`action` selector or implement `keyDown` forwarding on `NSTableView`/`NSOutlineView` to dispatch `OnActivate` with the selected `RowId` on Enter or double-click per FR-018 (missing)
+- [ ] T056 [US2] Surface sort indicator: after updating `model.sort` in `sort_changed`, call `tv.setHighlightedTableColumn(Some(&col))` so the platform sort arrow appears per FR-010/SC-006 (partial)
+- [ ] T057 [US2] Add `multi_select(bool)` builder to `ComponentBuilder` and wire `PropKey::MultiSelect` to `setAllowsMultipleSelection` in the Table create arm; update `selectionDidChange` to collect all selected indices per FR-009 (missing)
+- [ ] T058 Replace `docs/components/img/TableTree.png` with a clean isolated window screenshot (no browser background) per T043 scope (partial)
