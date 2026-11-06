@@ -41,6 +41,8 @@ use objc2_app_kit::{
     NSOutlineView, NSOutlineViewDataSource, NSOutlineViewDelegate,
     NSTableColumn, NSTableView,
     NSTableViewStyle,
+    NSTitlebarAccessoryViewController,
+    NSLayoutAttribute,
 };
 // Phase 2 extra imports for RichText attributed string rendering (FR-008)
 use objc2_app_kit::{NSFont, NSFontManager, NSForegroundColorAttributeName, NSFontAttributeName};
@@ -2204,10 +2206,31 @@ fn create_node(
                 }
                 stash_delegate(node_id, DelegateHandle::Button(target));
             }
-            attach_to_parent(state, parent_id, &sc);
+            // The real pill lives in the window's titlebar band, flush with
+            // the traffic lights — not inline in the scrolling content. A
+            // genuine NSTitlebarAccessoryViewController pinned to the left
+            // gets that for free; the control plays no part in this
+            // window's taffy tree (build_spec excludes BackForwardControl
+            // everywhere), so it's never positioned a second time.
+            if let Some(window) = enclosing_window(state, parent_id) {
+                unsafe {
+                    let wrapper = NSView::initWithFrame(
+                        mtm.alloc(),
+                        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(66.0, 28.0)),
+                    );
+                    sc.setFrame(NSRect::new(NSPoint::new(8.0, 2.0), NSSize::new(50.0, 24.0)));
+                    wrapper.addSubview(&sc);
+                    let accessory = NSTitlebarAccessoryViewController::new(mtm);
+                    accessory.setView(&wrapper);
+                    accessory.setLayoutAttribute(NSLayoutAttribute::Left);
+                    window.addTitlebarAccessoryViewController(&accessory);
+                }
+            } else {
+                attach_to_parent(state, parent_id, &sc);
+                register_child(state, parent_id, node_id);
+            }
             state.nodes.insert(node_id, NativeHandle::SegmentedControlWidget(sc));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
-            register_child(state, parent_id, node_id);
         }
 
         // ------------------------------------------------------------------
