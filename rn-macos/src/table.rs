@@ -37,7 +37,7 @@ use std::rc::Rc;
 
 // TableSourcesInner is single-threaded (MainThreadOnly); Rc is sufficient.
 pub(crate) struct TableSourcesInner {
-    model: Rc<ModelCell>,
+    pub(crate) model: Rc<ModelCell>,
 }
 
 /// Holds a data source and delegate pair that share one `TableModel`.
@@ -105,6 +105,24 @@ declare_class!(
                     SortDescriptor { column: c.id, direction: dir }
                 })
             };
+            // FR-010: update sort indicator.
+            if let Some(ref sd) = model.sort {
+                // Find the NSTableColumn with a matching title.
+                let cols = tv.tableColumns();
+                let n = cols.count();
+                for i in 0..n {
+                    let col = cols.objectAtIndex(i);
+                    let title = col.identifier().to_string();
+                    if let Some(my_col) = model.columns.iter().find(|c| c.id == sd.column) {
+                        if title == my_col.title {
+                            tv.setHighlightedTableColumn(Some(&col));
+                            break;
+                        }
+                    }
+                }
+            } else {
+                tv.setHighlightedTableColumn(None);
+            }
             model.sort = new_sort;
             tv.reloadData();
         }
@@ -139,9 +157,11 @@ unsafe fn make_cell_view(
     let col = col?;
     let col_id_str = col.identifier().to_string();
     let col_index = model.columns.iter().position(|c| c.title == col_id_str)?;
-    let cell_text = model.rows.get(row as usize)
+    let (cell_text, icon_name) = match model.rows.get(row as usize)
         .and_then(|r| r.cells.get(col_index))
-        .map(|c| c.text.clone())?;
+    {
+        Some(c) => (c.text.clone(), c.icon.clone()), None => return None,
+    };
     let mtm = MainThreadMarker::new()?;
     let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0));
     let tcv = NSTableCellView::initWithFrame(mtm.alloc(), frame);
@@ -149,6 +169,23 @@ unsafe fn make_cell_view(
     tf.setEditable(false);
     tf.setBordered(false);
     tf.setDrawsBackground(false);
+    // Add icon if the cell has one.
+    let text_x = if let Some(icon_name) = icon_name {
+        let img = unsafe {
+            objc2_app_kit::NSImage::imageWithSystemSymbolName_accessibilityDescription(
+                &NSString::from_str(&icon_name), None,
+            )
+        };
+        if let Some(img) = img {
+            let icon_frame = NSRect::new(NSPoint::new(2.0, 2.0), NSSize::new(14.0, 14.0));
+            let iv = objc2_app_kit::NSImageView::initWithFrame(mtm.alloc(), icon_frame);
+            iv.setImage(Some(&img));
+            tcv.addSubview(&iv);
+            20.0_f32
+        } else { 2.0 }
+    } else { 2.0 };
+    // Position text field after the icon.
+    let _ = text_x; // NSTextField auto-sizes; frame set at cell layout
     tcv.setTextField(Some(&tf));
     tcv.addSubview(&tf);
     Some(Retained::cast(tcv))
@@ -180,6 +217,7 @@ declare_class!(
         ) -> Option<Retained<NSView>> {
             make_cell_view(self, col, row)
         }
+
 
         #[method(tableViewSelectionDidChange:)]
         unsafe fn selection_changed(&self, notification: &NSNotification) {

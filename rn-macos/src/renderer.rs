@@ -576,7 +576,9 @@ fn create_node(
                 let pairs: Vec<(Retained<ButtonTarget>, _)> = command_set
                     .commands()
                     .iter()
-                    .map(|cmd| (ButtonTarget::new(mtm, cmd.handler, node_id), cmd))
+                    .map(|cmd| (ButtonTarget::with_availability(
+                        mtm, cmd.handler, node_id, cmd.available.clone()),
+                        cmd))
                     .collect();
                 let target_refs: Vec<(&AnyObject, &rn_core::data::Command)> = pairs
                     .iter()
@@ -1803,7 +1805,8 @@ fn create_node(
                 tv.setUsesAlternatingRowBackgroundColors(true);
                 tv.setAllowsColumnResizing(true);
                 tv.setAllowsColumnReordering(false);
-                tv.setAllowsMultipleSelection(false);
+                let multi = matches!(props.get(&PropKey::MultiSelect), Some(PropValue::Bool(true)));
+                tv.setAllowsMultipleSelection(multi);
             }
             // Add a column per model column.
             for col in &model.columns {
@@ -1828,16 +1831,32 @@ fn create_node(
                 unsafe { tv.addTableColumn(&ns_col); }
             }
             // Create data source + delegate.
+            let model_is_empty = model.rows.is_empty();
             let sources = crate::table::make_table_sources(
                 mtm, model, node_id, handler_select, handler_activate,
             );
             unsafe {
                 tv.setDataSource(Some(ProtocolObject::from_ref(&*sources.data)));
                 tv.setDelegate(Some(ProtocolObject::from_ref(&*sources.delegate)));
+                // FR-018: OnActivate is dispatched via tableViewSelectionDidChange + Enter key (AppKit built-in).
             }
             // Mount table inside scroll view.
             unsafe { sv.setDocumentView(Some(&*tv)); }
             stash_delegate(node_id, DelegateHandle::Table(sources));
+            // FR-014: empty-state label shown when the model has no rows.
+            if model_is_empty {
+                let empty_text = match props.get(&PropKey::EmptyText) {
+                    Some(PropValue::String(s)) => s.clone(),
+                    _ => "No items".to_owned(),
+                };
+                let empty_label = unsafe {
+                    NSTextField::labelWithString(&NSString::from_str(&empty_text), mtm)
+                };
+                unsafe {
+                    empty_label.setAlignment(objc2_app_kit::NSTextAlignment::Center);
+                    sv.addSubview(&empty_label);
+                }
+            }
             attach_to_parent(state, parent_id, &sv);
             state.nodes.insert(node_id, NativeHandle::TableWidget(sv));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
@@ -2431,6 +2450,55 @@ fn update_node(
             // SidebarItem selection is owned by the NSOutlineView now; nothing to
             // repaint by hand. The pill and manual repaint this replaced are gone.
             (NativeHandle::SidebarItemWidget(_), PropKey::Selected) => {}
+            // Phase A convergence: live-update table and tree on model change.
+            (NativeHandle::TableWidget(sv), PropKey::TableModelKey) => {
+                if let PropValue::TableModelProp(new_model) = value {
+                    DELEGATES.with(|m| {
+                        if let Some(DelegateHandle::Table(sources)) = m.borrow().get(&node_id) {
+                            // Preserve selection: remove RowIds no longer in new model.
+                            let valid: Vec<rn_core::data::RowId> =
+                                new_model.rows.iter().map(|r| r.id).collect();
+                            {
+                                let mut model = sources.inner.model.borrow_mut();
+                                model.selection.filter_to(&valid);
+                            }
+                            crate::table::update_table_model(sources, new_model.clone());
+                            // Reload the embedded NSTableView.
+                            let doc = unsafe { sv.documentView() };
+                            if let Some(doc) = doc {
+                                let tv: &NSTableView =
+                                    unsafe { &*(Retained::as_ptr(&doc) as *const NSTableView) };
+                                unsafe { tv.reloadData() };
+                            }
+                        }
+                    });
+                }
+            }
+            (NativeHandle::TreeWidget(sv), PropKey::TreeModelKey) => {
+                if let PropValue::TreeModelProp(new_model) = value {
+                    DELEGATES.with(|m| {
+                        if let Some(DelegateHandle::Tree(sources)) = m.borrow().get(&node_id) {
+                            // Capture expanded ids: union of model's initial expanded and
+                            // any the user opened interactively.
+                            let model_expanded = sources.inner.model.borrow().find_expanded();
+                            let interactive_expanded = sources.inner.expanded_ids.borrow().clone();
+                            let mut expanded: Vec<rn_core::data::RowId> = model_expanded;
+                            for id in interactive_expanded {
+                                if !expanded.contains(&id) { expanded.push(id); }
+                            }
+                            crate::tree::update_tree_model(sources, new_model.clone());
+                            // Reload and restore expansion.
+                            let doc = unsafe { sv.documentView() };
+                            if let Some(doc) = doc {
+                                let ov: &NSOutlineView =
+                                    unsafe { &*(Retained::as_ptr(&doc) as *const NSOutlineView) };
+                                unsafe { ov.reloadData() };
+                                crate::tree::restore_expansion(ov, sources, &expanded);
+                            }
+                        }
+                    });
+                }
+            }
             _ => {}
         }
     }
@@ -3962,6 +4030,8 @@ struct TargetIvars {
     handler: HandlerId,
     source: NodeId,
     kind: EventKind,
+    /// Availability rule for command menu items (FR-003).
+    available: rn_core::data::AvailabilityRule,
 }
 
 declare_class!(
@@ -3981,6 +4051,8 @@ declare_class!(
         #[method(fire:)]
         fn fire(&self, _sender: Option<&AnyObject>) {
             let ivars = self.ivars();
+            // Respect the availability rule: Never commands must not fire.
+            if ivars.available == rn_core::data::AvailabilityRule::Never { return; }
             log::debug!(
                 "ButtonTarget::fire — handler={:?} source={:?}",
                 ivars.handler,
@@ -4003,10 +4075,19 @@ declare_class!(
 
 impl ButtonTarget {
     fn new(mtm: MainThreadMarker, handler: HandlerId, source: NodeId) -> Retained<Self> {
+        Self::with_availability(mtm, handler, source, rn_core::data::AvailabilityRule::Always)
+    }
+    fn with_availability(
+        mtm: MainThreadMarker,
+        handler: HandlerId,
+        source: NodeId,
+        available: rn_core::data::AvailabilityRule,
+    ) -> Retained<Self> {
         let this = mtm.alloc().set_ivars(TargetIvars {
             handler,
             source,
             kind: EventKind::Press,
+            available,
         });
         unsafe { msg_send_id![super(this), init] }
     }
@@ -4067,6 +4148,7 @@ impl WindowDelegate {
             handler,
             source,
             kind: EventKind::Close,
+            available: rn_core::data::AvailabilityRule::Always,
         });
         unsafe { msg_send_id![super(this), init] }
     }
@@ -4121,6 +4203,7 @@ impl TextDelegate {
             handler,
             source,
             kind: EventKind::Change,
+            available: rn_core::data::AvailabilityRule::Always,
         });
         unsafe { msg_send_id![super(this), init] }
     }

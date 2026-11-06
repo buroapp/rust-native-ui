@@ -13,15 +13,35 @@ use rn_core::data::{AvailabilityRule, Command, CommandSet, Modifiers};
 
 /// Install the application main menu from a `CommandSet`.
 ///
-/// `targets` is a slice of `(target_obj, command)` pairs where `target_obj` is an
-/// `&AnyObject` whose `fire:` method dispatches the command handler. The caller
-/// keeps the target objects alive via `DelegateHandle::Commands`.
+/// Scans for duplicate `(key, modifiers)` pairs and prints a warning for each
+/// conflict (FR-006). `targets` is a slice of `(target_obj, command)` pairs.
 pub(crate) fn install_main_menu_with_targets(
     mtm: MainThreadMarker,
     _command_set: &CommandSet,
     targets: &[(&AnyObject, &Command)],
 ) {
     let app = NSApplication::sharedApplication(mtm);
+    // FR-006: detect duplicate shortcuts before wiring.
+    {
+        let mut seen: std::collections::HashMap<(String, u8), &str> = std::collections::HashMap::new();
+        for (_, cmd) in targets {
+            if let Some(binding) = &cmd.shortcut {
+                let key = (binding.key.clone(), binding.modifiers.0);
+                if let Some(existing) = seen.get(&key) {
+                    log::warn!(
+                        "ShortcutConflict: '{}' and '{}' share the same binding ({}{:?})",
+                        existing, cmd.title, binding.key, binding.modifiers
+                    );
+                    eprintln!(
+                        "[rn] ShortcutConflict: '{}' and '{}' share binding ⌘{}",
+                        existing, cmd.title, binding.key
+                    );
+                } else {
+                    seen.insert(key, &cmd.title);
+                }
+            }
+        }
+    }
     let bar = make_menu(mtm, "");
 
     // App-name submenu (macOS requires it as the first item).

@@ -797,3 +797,10 @@ impl ComponentBuilder {
         self.prop(PropKey::OnActivate, PropValue::HandlerRef(h))
     }
 }
+
+impl ComponentBuilder {
+    /// Enable multi-row selection on a Table component.
+    pub fn multi_select(self, enabled: bool) -> Self {
+        self.prop(PropKey::MultiSelect, PropValue::Bool(enabled))
+    }
+}

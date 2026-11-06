@@ -5,12 +5,20 @@ fn main() {
 
 #[cfg(all(target_os = "macos", feature = "macos"))]
 fn main() {
-    use rn::{command, hstack, label, table, tree, vstack, window};
     use rn::{
+        command, hstack, label, table, tree, vstack, window,
+        button,
         CommandPlacement, CommandSet, KeyBinding, Modifiers,
         TableCell, TableColumn, TableModel, TableRow,
         TreeModel, TreeNode,
     };
+
+    // Parse --rows N from CLI args (default 1000).
+    let row_count: usize = std::env::args()
+        .skip_while(|a| a != "--rows")
+        .nth(1)
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1000);
 
     let mut renderer = rn::backend::MacosRenderer::new()
         .expect("MacosRenderer");
@@ -24,38 +32,40 @@ fn main() {
     close_cmd.placement = CommandPlacement { menu: "Window".to_owned(), order: 10 };
     set.push(close_cmd);
 
-    // ── Table: 8 people × 5 columns ──────────────────────────────────────────
+    // ── Table ────────────────────────────────────────────────────────────────
     let columns = vec![
         TableColumn::new(0, "Name",       160.0).sortable(),
-        TableColumn::new(1, "Role",       140.0).sortable(),
-        TableColumn::new(2, "Department", 140.0).sortable(),
-        TableColumn::new(3, "Location",   120.0),
+        TableColumn::new(1, "Role",       130.0).sortable(),
+        TableColumn::new(2, "Department", 130.0).sortable(),
+        TableColumn::new(3, "Location",   110.0),
         TableColumn::new(4, "Status",     100.0),
     ];
-    let people: &[(&str, &str, &str, &str, &str)] = &[
-        ("Alice Müller",  "Engineer",      "Platform",       "Berlin", "Active"),
-        ("Bob Chen",      "Product",       "Growth",         "SF",     "Active"),
-        ("Carol Novak",   "Designer",      "Design",         "Remote", "Active"),
-        ("David Singh",   "Engineering",   "Infrastructure", "London", "On leave"),
-        ("Eve Tanaka",    "Data Scientist","Analytics",      "Tokyo",  "Active"),
-        ("Frank Osei",    "Engineer",      "Backend",        "Accra",  "Active"),
-        ("Grace Kim",     "PM",            "Payments",       "Seoul",  "Active"),
-        ("Héctor López",  "Engineer",      "Frontend",       "Madrid", "Active"),
-    ];
-    let rows: Vec<TableRow> = people.iter().enumerate().map(|(i, (n, r, d, l, s))| {
+    let roles    = ["Engineer", "PM", "Designer", "Data Scientist", "Analyst"];
+    let depts    = ["Platform", "Growth", "Design", "Analytics", "Infrastructure"];
+    let locs     = ["Berlin", "SF", "Remote", "London", "Tokyo"];
+    let statuses = ["Active", "On leave", "Active", "Active", "Draft"];
+    let rows: Vec<TableRow> = (0..row_count).map(|i| {
+        let n = i % roles.len();
         TableRow::new(i as u64, vec![
-            TableCell::text(*n), TableCell::text(*r), TableCell::text(*d),
-            TableCell::text(*l), TableCell::text(*s),
+            TableCell::text(format!("Person {i}")),
+            TableCell::text(roles[n]),
+            TableCell::text(depts[n]),
+            TableCell::text(locs[n % locs.len()]),
+            TableCell::text(statuses[n % statuses.len()]),
         ])
     }).collect();
-    let model = match TableModel::new(columns, rows) {
-        Ok(m) => m, Err(e) => { eprintln!("bad model: {e}"); return; }
-    };
-    let sel_id = rn::HandlerId::new();
-    rn::on(sel_id, |_| println!("table row selected"));
 
-    // ── Tree: file-system-style hierarchy ────────────────────────────────────
-    let tree_model = TreeModel::new(vec![
+    let model = match TableModel::new(columns, rows) {
+        Ok(m) => m,
+        Err(e) => { eprintln!("bad model: {e}"); return; }
+    };
+
+    let status_label_id = rn::HandlerId::new();
+    let sel_id = rn::HandlerId::new();
+    rn::on(sel_id, |_| println!("row selected"));
+
+    // ── Tree ─────────────────────────────────────────────────────────────────
+    let make_tree = || TreeModel::new(vec![
         TreeNode::branch(100, "src", vec![
             TreeNode::leaf(101, "main.rs").icon("doc.plaintext"),
             TreeNode::leaf(102, "lib.rs").icon("doc.plaintext"),
@@ -70,14 +80,18 @@ fn main() {
         ]),
         TreeNode::leaf(109, "Cargo.toml").icon("doc.text"),
     ]);
+
     let tree_sel_id = rn::HandlerId::new();
     rn::on(tree_sel_id, |_| println!("tree node selected"));
+
+    let refresh_id = rn::HandlerId::new();
+    rn::on(refresh_id, |_| println!("refresh triggered"));
 
     let component_tree = rn::ComponentTree::new(
         window()
             .modern(true)
-            .title("Table & Tree Demo")
-            .size(1000.0, 560.0)
+            .title(format!("Table & Tree Demo ({row_count} rows)"))
+            .size(1020.0, 580.0)
             .on_close(close_id)
             .commands(set)
             .child(
@@ -85,15 +99,19 @@ fn main() {
                     .flex(1.0)
                     .child(
                         vstack()
-                            .prop(rn::PropKey::Width, rn::PropValue::F32(220.0))
+                            .prop(rn::PropKey::Width, rn::PropValue::F32(230.0))
                             .flex(1.0)
-                            .child(label("Files"))
-                            .child(tree(tree_model).on_select(tree_sel_id))
+                            .child(
+                                hstack()
+                                    .child(label("Files"))
+                                    .child(button("↺").on_press(refresh_id))
+                            )
+                            .child(tree(make_tree()).on_select(tree_sel_id))
                     )
                     .child(
                         vstack()
                             .flex(1.0)
-                            .child(label("People"))
+                            .child(label(format!("People ({row_count} rows)")))
                             .child(table(model).on_select(sel_id))
                     )
             )

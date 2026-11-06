@@ -219,6 +219,8 @@ pub enum PropKey {
     ModernLook,
     /// Phase A: Native App Foundation — new prop keys
     Commands,
+    EmptyText,
+    MultiSelect,
     TableModelKey,
     TreeModelKey,
     OnActivate,
