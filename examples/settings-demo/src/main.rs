@@ -1,7 +1,7 @@
 //! settings-demo — macOS System Settings-style app.
 //!
-//! Sidebar: icon + label per category, no explicit separator (NSSplitViewController
-//! draws its own divider). Content switches on selection.
+//! Sidebar: search field pinned on top, labeled groups, colored SF Symbol
+//! glyphs per row, blue selection. Content switches on selection.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -47,8 +47,10 @@ fn main() -> Result<(), rn::RnError> {
         if let rn::EventPayload::Index(i) = e.payload { let _ = tx.send(UpdateMessage::new(Msg::Appearance(i))); }
     }); }
 
-    // Each category: (label, SF Symbol icon, tile tint) — colors mirror
-    // macOS System Settings' own sidebar.
+    let search_id = HandlerId::new();
+    { rn::on(search_id, |_| {}); }
+
+    // (label, SF Symbol, tile tint) — names and colors mirror real Settings.
     let categories: &[(&str, &str, &str)] = &[
         ("General",            "gearshape",              "gray"),
         ("Wi-Fi",              "wifi",                   "blue"),
@@ -73,6 +75,15 @@ fn main() -> Result<(), rn::RnError> {
         ("Printers & Scanners","printer",                "gray"),
     ];
 
+    // Sidebar grouping: (section label, category indices). Empty label = no header.
+    let groups: &[(&str, &[usize])] = &[
+        ("",         &[0]),
+        ("Network",  &[1, 2, 3]),
+        ("System",   &[4, 5, 6, 7, 8, 11, 12]),
+        ("Look",     &[9, 10, 13, 15]),
+        ("Hardware", &[14, 16, 17, 18, 19, 20]),
+    ];
+
     let mut cat_ids: Vec<HandlerId> = Vec::new();
     for i in 0..categories.len() {
         let id = HandlerId::new();
@@ -90,28 +101,32 @@ fn main() -> Result<(), rn::RnError> {
                 selected: 0, wifi: true, bluetooth: true, appearance: 0,
             });
 
-            // ---- Sidebar ----
-            let sidebar_items: Vec<rn::Component> = categories
-                .iter()
-                .enumerate()
-                .map(|(i, (lbl, icon, color))| {
-                    rn::sidebar_item(*lbl, cat_ids[i])
-                        .icon(*icon)
-                        .icon_color(*color)
-                        .prop(PropKey::Selected, PropValue::Bool(i == s.selected))
-                        .build()
-                })
-                .collect();
+            // ---- Sidebar: search on top, then labeled groups of items ----
+            let mut sidebar_items: Vec<rn::Component> = Vec::new();
+            for (label, idxs) in groups {
+                if !label.is_empty() {
+                    sidebar_items.push(rn::sidebar_section(*label).build());
+                }
+                for &i in *idxs {
+                    let (lbl, icon, color) = categories[i];
+                    sidebar_items.push(
+                        rn::sidebar_item(lbl, cat_ids[i])
+                            .icon(icon)
+                            .icon_color(color)
+                            .prop(PropKey::Selected, PropValue::Bool(i == s.selected))
+                            .build(),
+                    );
+                }
+            }
 
-            // Items go directly into sidebar — it provides its own NSScrollView.
             let sidebar = rn::sidebar()
                 .prop(PropKey::SidebarWidth, PropValue::F32(220.0))
+                .child(rn::search_bar("Search settings...", search_id).build())
                 .children(sidebar_items)
                 .build();
 
             // ---- Content (switches by selection) ----
             let (page_title, page_icon, page_color) = categories[s.selected];
-            let page_desc = page_title;
 
             let make_row = |title: &str, icon: &str| {
                 rn::list_tile(title)
@@ -129,22 +144,18 @@ fn main() -> Result<(), rn::RnError> {
                     .build()
             };
 
-            // Build content specific to the selected page.
             let mut page_content = rn::vstack().padding(20.0).gap(12.0).flex(1.0)
-                // Page header
                 .child(
-                    rn::hstack().gap(10.0)
+                    rn::hstack().gap(10.0).align_center()
                         .child(rn::image(page_icon).icon_color(page_color).build())
                         .child(rn::vstack()
                             .child(rn::label(page_title))
-                            .child(rn::label(page_desc))
                             .build())
                         .build()
                 )
                 .child(rn::separator());
 
             page_content = match s.selected {
-                // General
                 0 => page_content
                     .child(rn::grouped_section()
                         .child(make_row("About", "info.circle"))
@@ -163,7 +174,6 @@ fn main() -> Result<(), rn::RnError> {
                         .child(rn::divider())
                         .child(make_row("Sharing", "square.and.arrow.up"))
                         .build()),
-                // Appearance
                 9 => page_content
                     .child(rn::grouped_section()
                         .child(
@@ -181,7 +191,6 @@ fn main() -> Result<(), rn::RnError> {
                         .child(rn::divider())
                         .child(make_row("Highlight Color", "circle.fill"))
                         .build()),
-                // Wi-Fi
                 1 => page_content
                     .child(rn::grouped_section()
                         .child(make_toggle_row("Wi-Fi", s.wifi, wifi_id))
@@ -189,14 +198,12 @@ fn main() -> Result<(), rn::RnError> {
                     .child(rn::grouped_section()
                         .child(make_row("My Network", "wifi.circle.fill"))
                         .child(rn::divider())
-                        .child(make_row("Other Networks…", "wifi.exclamationmark"))
+                        .child(make_row("Other Networks...", "wifi.exclamationmark"))
                         .build()),
-                // Bluetooth
                 2 => page_content
                     .child(rn::grouped_section()
                         .child(make_toggle_row("Bluetooth", s.bluetooth, bt_id))
                         .build()),
-                // Everything else — generic placeholder
                 _ => page_content
                     .child(rn::grouped_section()
                         .child(make_row(
@@ -219,7 +226,6 @@ fn main() -> Result<(), rn::RnError> {
                     .child(
                         rn::hstack().gap(0.0).flex(1.0)
                             .child(sidebar)
-                            // No explicit separator — NSSplitViewController draws its own
                             .child(content)
                             .build()
                     )
