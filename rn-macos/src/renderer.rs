@@ -1211,183 +1211,7 @@ fn create_node(
         ComponentKind::ListTile => {
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 44.0));
             let row: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
-
-            let has_icon = props.contains_key(&PropKey::IconName);
-            let mut text_x: f64 = 12.0;
-
-            // Leading icon. With IconColor set, this is a Settings-style
-            // colored tile (squircle, or a round avatar when IconShape is
-            // "circle" — the Apple Account/Family rows); without it, a bare
-            // template glyph, for rows that don't carry a brand color.
-            if let Some(PropValue::String(icon_name)) = props.get(&PropKey::IconName) {
-                let tint = match props.get(&PropKey::IconColor) {
-                    Some(PropValue::String(s)) => Some(s.clone()),
-                    _ => None,
-                };
-                let is_circle = matches!(
-                    props.get(&PropKey::IconShape),
-                    Some(PropValue::String(s)) if s == "circle"
-                );
-                let tile_size: f64 = if is_circle { 32.0 } else { 26.0 };
-                let tile_origin = NSPoint::new(12.0, (44.0 - tile_size) / 2.0);
-
-                if let Some(tint_name) = tint {
-                    let tile = unsafe {
-                        NSBox::initWithFrame(
-                            mtm.alloc(),
-                            NSRect::new(tile_origin, NSSize::new(tile_size, tile_size)),
-                        )
-                    };
-                    unsafe {
-                        tile.setBoxType(NSBoxType::NSBoxCustom);
-                        tile.setCornerRadius(if is_circle { tile_size / 2.0 } else { 6.0 });
-                        tile.setFillColor(&crate::renderer::icon_tint(&tint_name));
-                        tile.setBorderWidth(0.0);
-                        tile.setContentViewMargins(NSSize::new(0.0, 0.0));
-                    }
-                    let inner = NSRect::new(
-                        NSPoint::new(tile_size * 0.22, tile_size * 0.22),
-                        NSSize::new(tile_size * 0.56, tile_size * 0.56),
-                    );
-                    let glyph: Retained<NSImageView> = unsafe {
-                        let v = NSImageView::initWithFrame(mtm.alloc(), inner);
-                        v.setImageScaling(objc2_app_kit::NSImageScaling::NSImageScaleProportionallyUpOrDown);
-                        v
-                    };
-                    let ns_name = NSString::from_str(icon_name);
-                    if let Some(img) = unsafe {
-                        NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
-                    } {
-                        unsafe {
-                            img.setTemplate(true);
-                            glyph.setImage(Some(&img));
-                            glyph.setContentTintColor(Some(&NSColor::whiteColor()));
-                        }
-                    }
-                    unsafe {
-                        if let Some(cv) = tile.contentView() {
-                            cv.addSubview(&glyph);
-                        }
-                    }
-                    unsafe { row.addSubview(&tile) };
-                } else {
-                    let iv: Retained<NSImageView> = unsafe {
-                        NSImageView::initWithFrame(
-                            mtm.alloc(),
-                            NSRect::new(tile_origin, NSSize::new(tile_size, tile_size)),
-                        )
-                    };
-                    let ns_name = NSString::from_str(icon_name);
-                    if let Some(img) = unsafe {
-                        NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
-                    } {
-                        unsafe { iv.setImage(Some(&img)) }
-                    }
-                    unsafe { row.addSubview(&iv) };
-                }
-                text_x = 12.0 + tile_size + 12.0;
-            }
-
-            let has_subtitle = props.contains_key(&PropKey::Subtitle);
-            let title_text = match props.get(&PropKey::Text) {
-                Some(PropValue::String(s)) => s.clone(),
-                _ => String::new(),
-            };
-
-            // Title
-            let title_h: f64 = 17.0;
-            let title_y = if has_subtitle {
-                24.0
-            } else {
-                (44.0 - title_h) / 2.0
-            };
-            let tf: Retained<NSTextField> = unsafe {
-                let t = NSTextField::initWithFrame(
-                    mtm.alloc(),
-                    NSRect::new(
-                        NSPoint::new(text_x, title_y),
-                        NSSize::new(400.0 - text_x - 40.0, title_h),
-                    ),
-                );
-                t.setEditable(false);
-                t.setBordered(false);
-                t.setDrawsBackground(false);
-                t.setStringValue(&NSString::from_str(&title_text));
-                t.setFont(Some(&NSFont::systemFontOfSize(NSFont::systemFontSize())));
-                t.setTextColor(Some(&NSColor::labelColor()));
-                t.setLineBreakMode(NSLineBreakMode(4));
-                t.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
-                t
-            };
-            unsafe { row.addSubview(&tf) };
-
-            // Subtitle
-            if let Some(PropValue::String(sub)) = props.get(&PropKey::Subtitle) {
-                let stf: Retained<NSTextField> = unsafe {
-                    let t = NSTextField::initWithFrame(
-                        mtm.alloc(),
-                        NSRect::new(
-                            NSPoint::new(text_x, 8.0),
-                            NSSize::new(400.0 - text_x - 40.0, 14.0),
-                        ),
-                    );
-                    t.setEditable(false);
-                    t.setBordered(false);
-                    t.setDrawsBackground(false);
-                    t.setStringValue(&NSString::from_str(sub));
-                    t.setFont(Some(&NSFont::systemFontOfSize(NSFont::smallSystemFontSize())));
-                    t.setTextColor(Some(&NSColor::secondaryLabelColor()));
-                    t.setLineBreakMode(NSLineBreakMode(4));
-                    t.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
-                    t
-                };
-                unsafe { row.addSubview(&stf) };
-            }
-
-            // Trailing disclosure chevron
-            if bool_prop(&props, PropKey::ShowChevron, true) {
-                let chev_frame =
-                    NSRect::new(NSPoint::new(400.0 - 26.0, 14.0), NSSize::new(16.0, 16.0));
-                let civ: Retained<NSImageView> =
-                    unsafe { NSImageView::initWithFrame(mtm.alloc(), chev_frame) };
-                let ns_name = NSString::from_str("chevron.right");
-                if let Some(img) = unsafe {
-                    NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
-                } {
-                    unsafe { civ.setImage(Some(&img)) }
-                }
-                unsafe {
-                    civ.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewMinXMargin);
-                    row.addSubview(&civ);
-                }
-                let _ = has_icon;
-            }
-
-            // Click target
-            if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnPress) {
-                let target = ButtonTarget::new(mtm, *h, node_id);
-                unsafe {
-                    let btn: Retained<NSButton> =
-                        NSButton::initWithFrame(mtm.alloc(), NSRect::new(
-                            NSPoint::new(0.0, 0.0),
-                            NSSize::new(400.0, 44.0),
-                        ));
-                    btn.setBezelStyle(NSBezelStyle::Automatic);
-                    btn.setBordered(false);
-                    btn.setTransparent(true);
-                    btn.setTitle(&NSString::from_str(""));
-                    btn.setAutoresizingMask(
-                        NSAutoresizingMaskOptions::NSViewWidthSizable
-                            | NSAutoresizingMaskOptions::NSViewHeightSizable,
-                    );
-                    let obj: &AnyObject = &target;
-                    btn.setTarget(Some(obj));
-                    btn.setAction(Some(sel!(fire:)));
-                    row.addSubview(&btn);
-                }
-                stash_delegate(node_id, DelegateHandle::Button(target));
-            }
-
+            populate_list_tile(mtm, &row, node_id, &props);
             attach_to_parent(state, parent_id, &row);
             state.nodes.insert(node_id, NativeHandle::ListTileWidget(row));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
@@ -2590,6 +2414,197 @@ fn create_node(
     Ok(())
 }
 
+
+/// Build (or rebuild) a ListTile's subviews — icon tile, title, subtitle,
+/// trailing chevron, and the full-row click target — from `props`. Shared by
+/// `create_node` and `update_node`: a ListTile's content is a composite of
+/// several subviews with no per-field update path, so an update just clears
+/// and rebuilds them, the same as creation. Without this, a prop change
+/// (e.g. re-selecting a different sidebar item swaps a GroupedSection row's
+/// Text/IconName at the same tree position) was silently dropped — the
+/// reconciler diffed it as an Update, not a Create, and nothing handled it,
+/// leaving stale text visible under a freshly-updated header next to it.
+fn populate_list_tile(mtm: MainThreadMarker, row: &NSView, node_id: NodeId, props: &Props) {
+    unsafe {
+        for sv in row.subviews().to_vec() {
+            sv.removeFromSuperview();
+        }
+    }
+
+    let has_icon = props.contains_key(&PropKey::IconName);
+    let mut text_x: f64 = 12.0;
+
+    // Leading icon. With IconColor set, this is a Settings-style
+    // colored tile (squircle, or a round avatar when IconShape is
+    // "circle" — the Apple Account/Family rows); without it, a bare
+    // template glyph, for rows that don't carry a brand color.
+    if let Some(PropValue::String(icon_name)) = props.get(&PropKey::IconName) {
+        let tint = match props.get(&PropKey::IconColor) {
+            Some(PropValue::String(s)) => Some(s.clone()),
+            _ => None,
+        };
+        let is_circle = matches!(
+            props.get(&PropKey::IconShape),
+            Some(PropValue::String(s)) if s == "circle"
+        );
+        let tile_size: f64 = if is_circle { 32.0 } else { 26.0 };
+        let tile_origin = NSPoint::new(12.0, (44.0 - tile_size) / 2.0);
+
+        if let Some(tint_name) = tint {
+            let tile = unsafe {
+                NSBox::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(tile_origin, NSSize::new(tile_size, tile_size)),
+                )
+            };
+            unsafe {
+                tile.setBoxType(NSBoxType::NSBoxCustom);
+                tile.setCornerRadius(if is_circle { tile_size / 2.0 } else { 6.0 });
+                tile.setFillColor(&crate::renderer::icon_tint(&tint_name));
+                tile.setBorderWidth(0.0);
+                tile.setContentViewMargins(NSSize::new(0.0, 0.0));
+            }
+            let inner = NSRect::new(
+                NSPoint::new(tile_size * 0.22, tile_size * 0.22),
+                NSSize::new(tile_size * 0.56, tile_size * 0.56),
+            );
+            let glyph: Retained<NSImageView> = unsafe {
+                let v = NSImageView::initWithFrame(mtm.alloc(), inner);
+                v.setImageScaling(objc2_app_kit::NSImageScaling::NSImageScaleProportionallyUpOrDown);
+                v
+            };
+            let ns_name = NSString::from_str(icon_name);
+            if let Some(img) = unsafe {
+                NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
+            } {
+                unsafe {
+                    img.setTemplate(true);
+                    glyph.setImage(Some(&img));
+                    glyph.setContentTintColor(Some(&NSColor::whiteColor()));
+                }
+            }
+            unsafe {
+                if let Some(cv) = tile.contentView() {
+                    cv.addSubview(&glyph);
+                }
+            }
+            unsafe { row.addSubview(&tile) };
+        } else {
+            let iv: Retained<NSImageView> = unsafe {
+                NSImageView::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(tile_origin, NSSize::new(tile_size, tile_size)),
+                )
+            };
+            let ns_name = NSString::from_str(icon_name);
+            if let Some(img) = unsafe {
+                NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
+            } {
+                unsafe { iv.setImage(Some(&img)) }
+            }
+            unsafe { row.addSubview(&iv) };
+        }
+        text_x = 12.0 + tile_size + 12.0;
+    }
+
+    let has_subtitle = props.contains_key(&PropKey::Subtitle);
+    let title_text = match props.get(&PropKey::Text) {
+        Some(PropValue::String(s)) => s.clone(),
+        _ => String::new(),
+    };
+
+    // Title
+    let title_h: f64 = 17.0;
+    let title_y = if has_subtitle {
+        24.0
+    } else {
+        (44.0 - title_h) / 2.0
+    };
+    let tf: Retained<NSTextField> = unsafe {
+        let t = NSTextField::initWithFrame(
+            mtm.alloc(),
+            NSRect::new(
+                NSPoint::new(text_x, title_y),
+                NSSize::new(400.0 - text_x - 40.0, title_h),
+            ),
+        );
+        t.setEditable(false);
+        t.setBordered(false);
+        t.setDrawsBackground(false);
+        t.setStringValue(&NSString::from_str(&title_text));
+        t.setFont(Some(&NSFont::systemFontOfSize(NSFont::systemFontSize())));
+        t.setTextColor(Some(&NSColor::labelColor()));
+        t.setLineBreakMode(NSLineBreakMode(4));
+        t.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
+        t
+    };
+    unsafe { row.addSubview(&tf) };
+
+    // Subtitle
+    if let Some(PropValue::String(sub)) = props.get(&PropKey::Subtitle) {
+        let stf: Retained<NSTextField> = unsafe {
+            let t = NSTextField::initWithFrame(
+                mtm.alloc(),
+                NSRect::new(
+                    NSPoint::new(text_x, 8.0),
+                    NSSize::new(400.0 - text_x - 40.0, 14.0),
+                ),
+            );
+            t.setEditable(false);
+            t.setBordered(false);
+            t.setDrawsBackground(false);
+            t.setStringValue(&NSString::from_str(sub));
+            t.setFont(Some(&NSFont::systemFontOfSize(NSFont::smallSystemFontSize())));
+            t.setTextColor(Some(&NSColor::secondaryLabelColor()));
+            t.setLineBreakMode(NSLineBreakMode(4));
+            t.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
+            t
+        };
+        unsafe { row.addSubview(&stf) };
+    }
+
+    // Trailing disclosure chevron
+    if bool_prop(props, PropKey::ShowChevron, true) {
+        let chev_frame = NSRect::new(NSPoint::new(400.0 - 26.0, 14.0), NSSize::new(16.0, 16.0));
+        let civ: Retained<NSImageView> = unsafe { NSImageView::initWithFrame(mtm.alloc(), chev_frame) };
+        let ns_name = NSString::from_str("chevron.right");
+        if let Some(img) = unsafe {
+            NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns_name, None)
+        } {
+            unsafe { civ.setImage(Some(&img)) }
+        }
+        unsafe {
+            civ.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewMinXMargin);
+            row.addSubview(&civ);
+        }
+        let _ = has_icon;
+    }
+
+    // Click target
+    if let Some(PropValue::HandlerRef(h)) = props.get(&PropKey::OnPress) {
+        let target = ButtonTarget::new(mtm, *h, node_id);
+        unsafe {
+            let btn: Retained<NSButton> = NSButton::initWithFrame(
+                mtm.alloc(),
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 44.0)),
+            );
+            btn.setBezelStyle(NSBezelStyle::Automatic);
+            btn.setBordered(false);
+            btn.setTransparent(true);
+            btn.setTitle(&NSString::from_str(""));
+            btn.setAutoresizingMask(
+                NSAutoresizingMaskOptions::NSViewWidthSizable
+                    | NSAutoresizingMaskOptions::NSViewHeightSizable,
+            );
+            let obj: &AnyObject = &target;
+            btn.setTarget(Some(obj));
+            btn.setAction(Some(sel!(fire:)));
+            row.addSubview(&btn);
+        }
+        stash_delegate(node_id, DelegateHandle::Button(target));
+    }
+}
+
 fn update_node(
     state: &mut RendererState,
     node_id: NodeId,
@@ -2598,6 +2613,41 @@ fn update_node(
     let Some(handle) = state.nodes.get(&node_id) else {
         return Err(RenderError::InvalidNode(node_id));
     };
+
+    // ListTile has no per-field update path — its content (icon tile,
+    // title, subtitle, chevron, click target) is a handful of subviews
+    // whose positions depend on each other, so any relevant prop change
+    // just rebuilds all of them from the merged props, the same work
+    // `create_node` does. See `populate_list_tile`.
+    if let NativeHandle::ListTileWidget(row) = handle {
+        let touches_content = changed.keys().any(|k| {
+            matches!(
+                k,
+                PropKey::Text
+                    | PropKey::Subtitle
+                    | PropKey::IconName
+                    | PropKey::IconColor
+                    | PropKey::IconShape
+                    | PropKey::ShowChevron
+                    | PropKey::OnPress
+            )
+        });
+        if touches_content {
+            if let Some(mtm) = MainThreadMarker::new() {
+                let mut merged = state
+                    .shadow
+                    .get(&node_id)
+                    .map(|sn| sn.props.clone())
+                    .unwrap_or_default();
+                for (k, v) in &changed {
+                    merged.insert(*k, v.clone());
+                }
+                let row = row.clone();
+                populate_list_tile(mtm, &row, node_id, &merged);
+            }
+        }
+    }
+
     for (key, value) in &changed {
         match (handle, key) {
             (NativeHandle::Window(w), PropKey::Title) => {
