@@ -8,7 +8,13 @@ mod renderer;
 
 #[cfg(target_os = "macos")]
 pub use renderer::MacosRenderer;
+
+#[cfg(target_os = "macos")]
 pub(crate) mod commands;
+#[cfg(target_os = "macos")]
 pub(crate) mod table;
+#[cfg(target_os = "macos")]
 pub(crate) mod tree;
+
+#[cfg(target_os = "macos")]
 pub use commands::set_command_flag;
