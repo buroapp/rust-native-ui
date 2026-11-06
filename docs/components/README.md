@@ -596,3 +596,10 @@ Open live: `cargo run -p storybook --features macos -- --select AlertDialog`
 
 Open live: `cargo run -p storybook --features macos -- --select Sheet`
 
+## Phase A — Native App Foundation (spec 005)
+
+| Component | Doc | Description |
+|-----------|-----|-------------|
+| `Table` | [Table.md](Table.md) | Sortable, resizable `NSTableView`-backed table |
+| `Tree` | [Tree.md](Tree.md) | Hierarchical `NSOutlineView`-backed outline view |
+| `Command` | [Command.md](Command.md) | Application menu bar and keyboard shortcuts |
