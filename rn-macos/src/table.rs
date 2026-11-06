@@ -172,6 +172,9 @@ pub(crate) struct DelegateIvars {
     #[allow(dead_code)] handler_activate: Option<HandlerId>,
 }
 
+// The declare_class! macro doesn't support ? inside method bodies, so make_cell_view
+// uses match/return-None patterns instead. Suppress the question_mark lint here.
+#[allow(clippy::question_mark)]
 unsafe fn make_cell_view(
     delegate: &TableDelegate,
     col: Option<&NSTableColumn>,
