@@ -2546,6 +2546,18 @@ fn update_node(
                                     let target = first_visible_row.min(new_row_count - 1);
                                     unsafe { tv.scrollRowToVisible(target) };
                                 }
+                                // SC-006/FR-009: restore visual selection for surviving RowIds.
+                                {
+                                    let model = sources.inner.model.borrow();
+                                    for sel_id in &model.selection.selected {
+                                        if let Some(row_pos) = model.rows.iter().position(|r| r.id == *sel_id) {
+                                            let idx_set = unsafe {
+                                                objc2_foundation::NSIndexSet::indexSetWithIndex(row_pos as objc2_foundation::NSUInteger)
+                                            };
+                                            unsafe { tv.selectRowIndexes_byExtendingSelection(&idx_set, true) };
+                                        }
+                                    }
+                                }
                             }
                         }
                     });
@@ -2571,6 +2583,29 @@ fn update_node(
                                     unsafe { &*(Retained::as_ptr(&doc) as *const NSOutlineView) };
                                 unsafe { ov.reloadData() };
                                 crate::tree::restore_expansion(ov, sources, &expanded);
+                                // SC-006/FR-016: restore visual selection for the surviving selected RowId.
+                                let selected_id = sources.inner.model.borrow().selection;
+                                if let Some(sel_id) = selected_id {
+                                    let n_rows = unsafe { ov.numberOfRows() };
+                                    for row in 0..n_rows {
+                                        let item = unsafe { ov.itemAtRow(row) };
+                                        if let Some(item) = item {
+                                            let num: &objc2_foundation::NSNumber =
+                                                unsafe { &*(Retained::as_ptr(&item) as *const objc2_foundation::NSNumber) };
+                                            let idx = num.longLongValue();
+                                            if idx >= 0 {
+                                                let snap = sources.inner.snapshot.borrow();
+                                                if snap.get(idx as usize).is_some_and(|n| n.id == sel_id) {
+                                                    let idx_set = unsafe {
+                                                        objc2_foundation::NSIndexSet::indexSetWithIndex(row as objc2_foundation::NSUInteger)
+                                                    };
+                                                    unsafe { ov.selectRowIndexes_byExtendingSelection(&idx_set, false) };
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     });

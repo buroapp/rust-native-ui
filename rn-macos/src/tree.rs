@@ -24,8 +24,8 @@ use rn_core::{
 // The snapshot is rebuilt every time the model changes.
 #[derive(Clone)]
 #[allow(dead_code)]
-struct FlatNode {
-    id: RowId,
+pub(crate) struct FlatNode {
+    pub(crate) id: RowId,
     label: String,
     icon: Option<String>,
     has_children: bool,
@@ -97,7 +97,7 @@ fn idx_to_item(_mtm: MainThreadMarker, idx: usize) -> Retained<NSNumber> {
 // ---------------------------------------------------------------------------
 pub(crate) struct TreeSourcesInner {
     pub(crate) model: RefCell<TreeModel>,
-    snapshot: RefCell<Snapshot>,
+    pub(crate) snapshot: RefCell<Snapshot>,
     /// Tracks which RowIds are currently expanded in the outline view.
     /// Updated on expand/collapse events. Used by restore_expansion after reloadData.
     pub(crate) expanded_ids: RefCell<std::collections::HashSet<RowId>>,
