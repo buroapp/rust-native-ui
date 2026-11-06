@@ -39,7 +39,8 @@ use objc2_app_kit::{
     NSTitlePosition,
     NSSplitViewController, NSSplitViewItem, NSViewController,
     NSOutlineView, NSOutlineViewDataSource, NSOutlineViewDelegate,
-    NSTableColumn, NSTableViewStyle,
+    NSTableColumn, NSTableView,
+    NSTableViewStyle,
 };
 // Phase 2 extra imports for RichText attributed string rendering (FR-008)
 use objc2_app_kit::{NSFont, NSFontManager, NSForegroundColorAttributeName, NSFontAttributeName};
@@ -1773,8 +1774,69 @@ fn create_node(
         // Phase A: table and tree — renderer modules handle the actual construction,
         // delegated to rn-macos/src/table.rs and rn-macos/src/tree.rs.
         ComponentKind::Table => {
+            // Extract TableModel from props.
+            let model = match props.get(&PropKey::TableModelKey) {
+                Some(PropValue::TableModelProp(m)) => m.clone(),
+                _ => rn_core::data::TableModel {
+                    columns: vec![],
+                    rows: vec![],
+                    sort: None,
+                    selection: rn_core::data::Selection::default(),
+                },
+            };
+            let handler_select = match props.get(&PropKey::OnSelect) {
+                Some(PropValue::HandlerRef(h)) => Some(*h),
+                _ => None,
+            };
+            let handler_activate = match props.get(&PropKey::OnActivate) {
+                Some(PropValue::HandlerRef(h)) => Some(*h),
+                _ => None,
+            };
+            // Build NSTableView inside a scroll view.
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 300.0));
             let sv = new_scroll_container(mtm, frame, false);
+            let tv: Retained<NSTableView> = unsafe {
+                NSTableView::initWithFrame(mtm.alloc(), frame)
+            };
+            // Configure NSTableView.
+            unsafe {
+                tv.setUsesAlternatingRowBackgroundColors(true);
+                tv.setAllowsColumnResizing(true);
+                tv.setAllowsColumnReordering(false);
+                tv.setAllowsMultipleSelection(false);
+            }
+            // Add a column per model column.
+            for col in &model.columns {
+                let ns_col: Retained<objc2_app_kit::NSTableColumn> = unsafe {
+                    objc2_app_kit::NSTableColumn::initWithIdentifier(
+                        mtm.alloc(),
+                        &NSString::from_str(&col.title),
+                    )
+                };
+                unsafe { ns_col.setWidth(col.width as f64); }
+                unsafe { ns_col.setMinWidth(col.min_width as f64); }
+                if col.sortable {
+                    let desc = unsafe {
+                        objc2_foundation::NSSortDescriptor::sortDescriptorWithKey_ascending(
+                            Some(&NSString::from_str(&col.title)),
+                            true,
+                        )
+                    };
+                    unsafe { ns_col.setSortDescriptorPrototype(Some(&desc)); }
+                }
+                unsafe { tv.addTableColumn(&ns_col); }
+            }
+            // Create data source + delegate.
+            let sources = crate::table::make_table_sources(
+                mtm, model, node_id, handler_select, handler_activate,
+            );
+            unsafe {
+                tv.setDataSource(Some(ProtocolObject::from_ref(&*sources.data)));
+                tv.setDelegate(Some(ProtocolObject::from_ref(&*sources.delegate)));
+            }
+            // Mount table inside scroll view.
+            unsafe { sv.setDocumentView(Some(&*tv)); }
+            stash_delegate(node_id, DelegateHandle::Table(sources));
             attach_to_parent(state, parent_id, &sv);
             state.nodes.insert(node_id, NativeHandle::TableWidget(sv));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
@@ -4146,6 +4208,8 @@ enum DelegateHandle {
     Sidebar(Retained<SidebarModel>),
     /// Phase A: command targets must outlive the menu items that reference them.
     Commands(Vec<Retained<ButtonTarget>>),
+    /// Phase A: NSTableView data source + delegate pair.
+    Table(crate::table::TableSources),
 }
 
 thread_local! {

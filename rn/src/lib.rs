@@ -786,3 +786,14 @@ pub fn tree(model: TreeModel) -> ComponentBuilder {
         .prop(PropKey::TreeModelKey, PropValue::TreeModelProp(model))
         .flex(1.0)
 }
+
+impl ComponentBuilder {
+    /// Wire an `OnSelect` handler to a Table or Tree component.
+    pub fn on_select(self, h: HandlerId) -> Self {
+        self.prop(PropKey::OnSelect, PropValue::HandlerRef(h))
+    }
+    /// Wire an `OnActivate` handler (double-click / Enter) to a Table or Tree.
+    pub fn on_activate(self, h: HandlerId) -> Self {
+        self.prop(PropKey::OnActivate, PropValue::HandlerRef(h))
+    }
+}
