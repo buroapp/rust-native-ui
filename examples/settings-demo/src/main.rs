@@ -331,6 +331,122 @@ fn main() -> Result<(), rn::RnError> {
                         .child(rn::divider())
                         .child(make_row("Battery Percentage", "batteryblock.fill", "green"))
                         .build()),
+                3 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Wi-Fi", "wifi", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Ethernet", "cable.connector", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("VPN", "lock.shield", "blue"))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Firewall", "flame.fill", "orange"))
+                        .child(rn::divider())
+                        .child(make_row("DNS", "network", "gray"))
+                        .build()),
+                7 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("App Limits", "hourglass", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Downtime", "moon.zzz.fill", "indigo"))
+                        .child(rn::divider())
+                        .child(make_row("Always Allowed", "checkmark.circle", "green"))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Content & Privacy", "exclamationmark.shield", "red"))
+                        .build()),
+                10 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("VoiceOver", "eye.fill", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Zoom", "plus.magnifyingglass", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Display", "sun.max.fill", "orange"))
+                        .child(rn::divider())
+                        .child(make_row("Spoken Content", "waveform", "purple"))
+                        .build()),
+                11 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Sound", "speaker.wave.2", "pink"))
+                        .child(rn::divider())
+                        .child(make_row("Wi-Fi", "wifi", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Bluetooth", "wave.3.right", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Now Playing", "play.circle.fill", "red"))
+                        .build()),
+                12 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Siri Voice", "waveform.circle", "purple"))
+                        .child(rn::divider())
+                        .child(make_row("Spotlight", "magnifyingglass.circle.fill", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("Announce Notifications", "bell.and.waves.left.and.right", "purple"))
+                        .build()),
+                14 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Dock Size", "dock.rectangle", "blue"))
+                        .child(rn::divider())
+                        .child(make_row("Magnification", "arrow.up.left.and.arrow.down.right", "blue"))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Mission Control", "square.grid.3x3.fill", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("Hot Corners...", "rectangle.3.group", "gray"))
+                        .build()),
+                15 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Resolution", "rectangle.on.rectangle", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("Brightness", "sun.max.fill", "orange"))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Night Shift", "moon.stars.fill", "indigo"))
+                        .child(rn::divider())
+                        .child(make_row("True Tone", "sparkles", "teal"))
+                        .build()),
+                16 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Desktop Picture", "photo.on.rectangle", "teal"))
+                        .child(rn::divider())
+                        .child(make_row("Dynamic Wallpaper", "photo.stack", "teal"))
+                        .child(rn::divider())
+                        .child(make_row("Screen Saver", "sparkles", "indigo"))
+                        .build()),
+                18 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Keyboard Shortcuts...", "command", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("Text Replacements", "textformat.abc", "blue"))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Dictation", "mic.fill", "pink"))
+                        .child(rn::divider())
+                        .child(make_row("Input Sources", "globe", "blue"))
+                        .build()),
+                19 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Tracking Speed", "cursorarrow.motionlines", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("Scroll Direction", "arrow.up.arrow.down", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("Secondary Click", "cursorarrow.click.2", "gray"))
+                        .build()),
+                20 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("Point & Click", "hand.point.up.left.fill", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("Scroll & Zoom", "arrow.up.left.and.down.right.magnifyingglass", "gray"))
+                        .child(rn::divider())
+                        .child(make_row("More Gestures", "hand.draw.fill", "gray"))
+                        .build()),
+                21 => page_content
+                    .child(rn::grouped_section()
+                        .child(make_row("No printers or scanners found", "printer", "gray"))
+                        .build())
+                    .child(rn::grouped_section()
+                        .child(make_row("Add Printer or Scanner...", "plus.circle", "blue"))
+                        .build()),
                 _ => page_content
                     .child(rn::grouped_section()
                         .child(make_row(

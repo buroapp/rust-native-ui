@@ -309,6 +309,17 @@ struct RendererState {
     /// each such window to the pane views it owns, keyed by the pane's node id, so
     /// relayout can run taffy inside each pane independently.
     split_panes: HashMap<NodeId, SplitPanes>,
+    /// Content inset each Sidebar's scroll view needs so its outline rows
+    /// start below a pinned search/account/family header band. apply_rects
+    /// re-asserts this on every relayout — without it, repeatedly setting
+    /// the scroll view's own frame (every single rerender touches it, even
+    /// when the rect hasn't changed) could make AppKit's safe-area/inset
+    /// machinery silently recompute and drop our manual override, which
+    /// only ever ran once at promotion time. Found via rapid-selection
+    /// stress testing: the account/family band stayed visually pinned, but
+    /// the outline's own rows started scrolling up underneath it — a
+    /// one-shot setContentInsets that nothing ever re-applied.
+    sidebar_top_insets: HashMap<NodeId, f64>,
 }
 
 impl RendererState {
@@ -322,6 +333,7 @@ impl RendererState {
             _tick_timer: None,
             presented_sheets: std::cell::RefCell::new(std::collections::HashSet::new()),
             split_panes: HashMap::new(),
+            sidebar_top_insets: HashMap::new(),
         }
     }
 }
@@ -3188,6 +3200,7 @@ fn populate_sidebar(state_cell: &Rc<RefCell<RendererState>>, pane_id: NodeId, pa
                 right: 0.0,
             });
         }
+        state_cell.borrow_mut().sidebar_top_insets.insert(pane_id, sep_y + 8.0);
     }
     stash_delegate(pane_id, DelegateHandle::Sidebar(model));
 }
@@ -3746,6 +3759,29 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
             rect.x, rect.y, shadow_parent_id
         );
         unsafe { view.setFrame(ns) };
+
+        // Re-assert the sidebar's reserved header-band inset every relayout.
+        // setFrame touches the scroll view on every single rerender, even
+        // when the rect is unchanged — found via rapid-selection stress
+        // testing that AppKit can silently drop a manually-set
+        // contentInsets.top somewhere in that path, which only ever ran
+        // once at promotion time. Re-applying it here is cheap and makes
+        // the pinned search/account/family band self-healing instead of a
+        // one-shot setting nothing protects afterward.
+        if let Some(top_inset) = state.sidebar_top_insets.get(&node_id) {
+            if let NativeHandle::SidebarWidget(sv) = handle {
+                let sv: &NSScrollView = unsafe { &*(Retained::as_ptr(sv) as *const NSScrollView) };
+                unsafe {
+                    sv.setAutomaticallyAdjustsContentInsets(false);
+                    sv.setContentInsets(NSEdgeInsets {
+                        top: *top_inset,
+                        left: 0.0,
+                        bottom: 0.0,
+                        right: 0.0,
+                    });
+                }
+            }
+        }
     }
 
     ensure_selection_visible(state);
