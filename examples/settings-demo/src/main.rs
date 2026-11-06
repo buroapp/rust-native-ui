@@ -256,7 +256,7 @@ fn main() -> Result<(), rn::RnError> {
                 rn::window()
                     .modern(true)
                     .title("Settings")
-                    .size(780.0, 580.0)
+                    .size(780.0, 640.0)
                     .on_close(close_id)
                     .child(
                         rn::hstack().gap(0.0).flex(1.0)

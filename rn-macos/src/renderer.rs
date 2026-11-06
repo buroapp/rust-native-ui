@@ -1316,6 +1316,7 @@ fn create_node(
                 t.setFont(Some(&NSFont::systemFontOfSize(NSFont::systemFontSize())));
                 t.setTextColor(Some(&NSColor::labelColor()));
                 t.setLineBreakMode(NSLineBreakMode(4));
+                t.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
                 t
             };
             unsafe { row.addSubview(&tf) };
@@ -1337,6 +1338,7 @@ fn create_node(
                     t.setFont(Some(&NSFont::systemFontOfSize(NSFont::smallSystemFontSize())));
                     t.setTextColor(Some(&NSColor::secondaryLabelColor()));
                     t.setLineBreakMode(NSLineBreakMode(4));
+                    t.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
                     t
                 };
                 unsafe { row.addSubview(&stf) };
@@ -1354,7 +1356,10 @@ fn create_node(
                 } {
                     unsafe { civ.setImage(Some(&img)) }
                 }
-                unsafe { row.addSubview(&civ) };
+                unsafe {
+                    civ.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewMinXMargin);
+                    row.addSubview(&civ);
+                }
                 let _ = has_icon;
             }
 
@@ -1371,6 +1376,10 @@ fn create_node(
                     btn.setBordered(false);
                     btn.setTransparent(true);
                     btn.setTitle(&NSString::from_str(""));
+                    btn.setAutoresizingMask(
+                        NSAutoresizingMaskOptions::NSViewWidthSizable
+                            | NSAutoresizingMaskOptions::NSViewHeightSizable,
+                    );
                     let obj: &AnyObject = &target;
                     btn.setTarget(Some(obj));
                     btn.setAction(Some(sel!(fire:)));
