@@ -569,6 +569,25 @@ fn create_node(
                 window.setDelegate(Some(proto));
                 stash_delegate(node_id, DelegateHandle::Window(delegate));
             }
+            // Phase A: command and keyboard layer — install the application main menu.
+            if let Some(PropValue::CommandSet(command_set)) = props.get(&PropKey::Commands) {
+                let mut targets: Vec<Retained<ButtonTarget>> = Vec::new();
+                let pairs: Vec<(Retained<ButtonTarget>, _)> = command_set
+                    .commands()
+                    .iter()
+                    .map(|cmd| (ButtonTarget::new(mtm, cmd.handler, node_id), cmd))
+                    .collect();
+                let target_refs: Vec<(&AnyObject, &rn_core::data::Command)> = pairs
+                    .iter()
+                    .map(|(t, cmd)| {
+                        let obj: &AnyObject = t;
+                        (obj, *cmd)
+                    })
+                    .collect();
+                crate::commands::install_main_menu_with_targets(mtm, command_set, &target_refs);
+                for (t, _) in pairs { targets.push(t); }
+                stash_delegate(node_id, DelegateHandle::Commands(targets));
+            }
             window.makeKeyAndOrderFront(None);
             state.nodes.insert(node_id, NativeHandle::Window(window));
             state
@@ -4125,6 +4144,8 @@ enum DelegateHandle {
     /// The outline view holds the sidebar model as a weak data-source/delegate ref,
     /// so we must keep it alive here.
     Sidebar(Retained<SidebarModel>),
+    /// Phase A: command targets must outlive the menu items that reference them.
+    Commands(Vec<Retained<ButtonTarget>>),
 }
 
 thread_local! {

@@ -217,6 +217,12 @@ pub enum PropKey {
     OnClose,
     /// Render with the modern full-size-content window look.
     ModernLook,
+    /// Phase A: Native App Foundation — new prop keys
+    Commands,
+    TableModelKey,
+    TreeModelKey,
+    OnActivate,
+    OnToggle,
     /// Cross-axis alignment of a container's children.
     Align,
     /// Wrap children onto new lines instead of overflowing.

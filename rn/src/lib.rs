@@ -733,3 +733,56 @@ pub fn toolbar(actions: Vec<ToolbarAction>) -> ComponentBuilder {
     ComponentBuilder::new(ComponentKind::Toolbar)
         .prop(PropKey::ToolbarActions, PropValue::ToolbarActions(actions))
 }
+
+// ---------------------------------------------------------------------------
+// Phase A: Native App Foundation builders
+// ---------------------------------------------------------------------------
+
+/// Attach a set of commands to a window, installing an application menu bar.
+///
+/// ```no_run
+/// use rn::{command, window, PropKey, PropValue};
+/// use rn_core::data::{CommandSet, Modifiers};
+///
+/// let set = CommandSet::new();
+/// let w = window().commands(set).build();
+/// ```
+pub use rn_core::data::{
+    AvailabilityRule, Command, CommandId, CommandPlacement, CommandSet,
+    ColumnId, FlagId, KeyBinding, Modifiers, RowId,
+    Selection, SortDescriptor, SortDirection, TableCell, TableColumn,
+    TableModel, TableRow, TextAlign, TreeModel, TreeNode,
+};
+
+/// Build a [`Command`] to declare on a window.
+pub fn command(id: u64, title: impl Into<String>, handler: HandlerId) -> Command {
+    Command {
+        id: CommandId(id),
+        title: title.into(),
+        shortcut: None,
+        available: AvailabilityRule::Always,
+        handler,
+        placement: CommandPlacement::default(),
+    }
+}
+
+impl ComponentBuilder {
+    /// Attach a [`CommandSet`] to a window, building the application menu bar.
+    pub fn commands(self, cs: CommandSet) -> Self {
+        self.prop(PropKey::Commands, PropValue::CommandSet(cs))
+    }
+}
+
+/// Start building a `Table` component driven by a [`TableModel`].
+pub fn table(model: TableModel) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Table)
+        .prop(PropKey::TableModelKey, PropValue::TableModelProp(model))
+        .flex(1.0)
+}
+
+/// Start building a `Tree` component driven by a [`TreeModel`].
+pub fn tree(model: TreeModel) -> ComponentBuilder {
+    ComponentBuilder::new(ComponentKind::Tree)
+        .prop(PropKey::TreeModelKey, PropValue::TreeModelProp(model))
+        .flex(1.0)
+}
