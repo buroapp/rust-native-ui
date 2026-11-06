@@ -47,6 +47,8 @@ pub(crate) struct TableSources {
     pub delegate: Retained<TableDelegate>,
     #[allow(dead_code)]
     pub(crate) inner: Rc<TableSourcesInner>,
+    /// Optional target for the NSTableView doubleAction (OnActivate).
+    pub activate: Option<Retained<objc2::runtime::NSObject>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +125,20 @@ declare_class!(
             } else {
                 tv.setHighlightedTableColumn(None);
             }
-            model.sort = new_sort;
+            model.sort = new_sort.clone();
+            // FR-010: physically reorder the rows so viewForTableColumn:row: returns
+            // sorted data. Stable sort preserves relative order for equal-text rows.
+            if let Some(ref sd) = new_sort {
+                let col_index = model.columns.iter().position(|c| c.id == sd.column);
+                if let Some(ci) = col_index {
+                    let ascending = sd.direction == SortDirection::Ascending;
+                    model.rows.sort_by(|a, b| {
+                        let ta = a.cells.get(ci).map_or("", |c| c.text.as_str());
+                        let tb = b.cells.get(ci).map_or("", |c| c.text.as_str());
+                        if ascending { ta.cmp(tb) } else { tb.cmp(ta) }
+                    });
+                }
+            }
             tv.reloadData();
         }
     }
@@ -223,21 +238,31 @@ declare_class!(
         unsafe fn selection_changed(&self, notification: &NSNotification) {
             let ov = match notification.object() { Some(o) => o, None => return };
             let tv: &NSTableView = &*(Retained::as_ptr(&ov) as *const NSTableView);
-            let row = tv.selectedRow();
-            if row < 0 { return; }
             let inner = &*self.ivars().inner;
+            let handler = match self.ivars().handler_select { Some(h) => h, None => return };
             let model = inner.model.borrow();
-            if let Some(row_data) = model.rows.get(row as usize) {
-                if let Some(h) = self.ivars().handler_select {
-                    rn_core::dispatch_event(Event {
-                        source: self.ivars().source,
-                        handler: h,
-                        kind: EventKind::Press,
-                        payload: EventPayload::None,
-                        stop_bubbling: false,
-                    });
+            // FR-009: collect all selected row RowIds (supports both single and multi-select).
+            let index_set = tv.selectedRowIndexes();
+            let count = index_set.count();
+            if count == 0 { return; }
+            let usize_max = usize::MAX as objc2_foundation::NSUInteger;
+            let mut idx = index_set.firstIndex();
+            let mut selected_ids: Vec<rn_core::data::RowId> = Vec::new();
+            while idx != usize_max {
+                if let Some(row_data) = model.rows.get(idx) {
+                    selected_ids.push(row_data.id);
                 }
-                let _ = row_data;
+                idx = index_set.indexGreaterThanIndex(idx);
+            }
+            drop(model);
+            if !selected_ids.is_empty() {
+                rn_core::dispatch_event(Event {
+                    source: self.ivars().source,
+                    handler,
+                    kind: EventKind::Press,
+                    payload: EventPayload::None,
+                    stop_bubbling: false,
+                });
             }
         }
     }
@@ -273,7 +298,7 @@ pub(crate) fn make_table_sources(
     let raw: *const TableSourcesInner = Rc::as_ptr(&inner);
     let data = TableDataSource::new(mtm, raw, source);
     let delegate = TableDelegate::new(mtm, raw, source, handler_select, handler_activate);
-    TableSources { data, delegate, inner }
+    TableSources { data, delegate, inner, activate: None }
 }
 
 /// Update the model inside existing TableSources after a data refresh.

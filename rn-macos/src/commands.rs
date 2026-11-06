@@ -126,3 +126,23 @@ pub(crate) fn modifiers_to_ns(m: Modifiers) -> NSEventModifierFlags {
     if m.contains(Modifiers::CONTROL)  { f.0 |= NSControlKeyMask.0; }
     f
 }
+
+// ---------------------------------------------------------------------------
+// FR-003/FR-004: Dynamic WhenFlag availability
+// ---------------------------------------------------------------------------
+
+thread_local! {
+    static FLAG_REGISTRY: std::cell::RefCell<std::collections::HashMap<rn_core::data::FlagId, bool>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Set a flag value so `WhenFlag(id)` availability rules update on the next menu open.
+/// Call from application code before showing the window's menu.
+pub fn set_command_flag(id: rn_core::data::FlagId, value: bool) {
+    FLAG_REGISTRY.with(|m| { m.borrow_mut().insert(id, value); });
+}
+
+/// Query current flag value (true if not yet registered).
+pub(crate) fn flag_is_enabled(id: rn_core::data::FlagId) -> bool {
+    FLAG_REGISTRY.with(|m| *m.borrow().get(&id).unwrap_or(&true))
+}

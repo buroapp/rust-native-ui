@@ -206,3 +206,15 @@ is most likely to break:
 - `completeness-guard` in CI still fails on an unhandled kind, which means the stub
   matches were extended rather than weakened with a catch-all.
 - The sidebar, toolbar and split-view chrome from feature 004 is unchanged.
+
+## §A3 — Scale test (SC-003, SC-004)
+
+```sh
+# Launch with 100,000 generated rows
+cargo run -p table-demo --features macos -- --rows 100000
+```
+
+1. Scroll rapidly from top to bottom and back — no visible stutter should occur.
+2. Observe resident memory in Activity Monitor — it should be ~proportional to 100k × (row struct size),
+   not growing during scroll (NSTableView virtualizes views; rows stay in the model Vec).
+3. Click a sortable column — rows re-sort and table reloads; first visible row position restored.

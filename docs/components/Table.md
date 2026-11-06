@@ -61,3 +61,39 @@ Returns `Err` if any row's cell count doesn't match the column count.
 ## Screenshot
 
 ![Table & Tree Demo](img/TableTree.png)
+
+## Scale validation (SC-003, SC-004)
+
+Run the demo with 100,000 rows to validate scroll performance and memory behaviour:
+
+```sh
+cargo run -p table-demo --features macos -- --rows 100000
+```
+
+**SC-003** — scrolling 100k rows should remain smooth throughout (no frames over platform budget).
+AppKit's `NSTableView` view-virtualizes cell rendering, so only the visible rows plus a small
+buffer are allocated as `NSView` objects at any given time.
+
+**SC-004** — memory note: all 100k `TableRow` structs are heap-allocated in the `Vec<TableRow>`.
+The per-frame allocation budget is satisfied by `NSTableView`'s built-in virtualization; total
+resident memory grows linearly with total row count, not with visible rows. For datasets larger
+than ~1M rows, consider a lazy-loading data source rather than materializing all rows upfront.
+
+## Accessibility (FR-019, SC-008)
+
+Column headers are populated via `NSTableColumn::setTitle`, which AppKit's native
+`NSTableHeaderView` exposes as accessibility elements with role `AXColumn` and
+the column title as the accessible name. No additional annotations are required.
+
+To verify:
+
+```sh
+# Open Accessibility Inspector (Xcode → Open Developer Tool → Accessibility Inspector)
+# Focus the table-demo window, hover over a column header.
+# The inspector should report:
+#   Role: AXColumn
+#   Title / Label: <column name> (e.g. "Name", "Role", "Department")
+```
+
+Row content is exposed by `NSTableView`'s built-in AX implementation with role `AXRow`.
+Selected state is reflected via the platform's own selection AX attributes.

@@ -11,3 +11,4 @@ pub use renderer::MacosRenderer;
 pub(crate) mod commands;
 pub(crate) mod table;
 pub(crate) mod tree;
+pub use commands::set_command_flag;

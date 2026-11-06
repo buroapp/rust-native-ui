@@ -1819,6 +1819,11 @@ fn create_node(
                 unsafe { ns_col.setWidth(col.width as f64); }
                 unsafe { ns_col.setMinWidth(col.min_width as f64); }
                 unsafe { ns_col.setTitle(&NSString::from_str(&col.title)); }
+                // FR-008: allow user to resize columns by dragging the divider.
+                unsafe {
+                    use objc2_app_kit::NSTableColumnResizingOptions;
+                    ns_col.setResizingMask(NSTableColumnResizingOptions::NSTableColumnUserResizingMask);
+                }
                 if col.sortable {
                     let desc = unsafe {
                         objc2_foundation::NSSortDescriptor::sortDescriptorWithKey_ascending(
@@ -1832,13 +1837,25 @@ fn create_node(
             }
             // Create data source + delegate.
             let model_is_empty = model.rows.is_empty();
-            let sources = crate::table::make_table_sources(
+            let mut sources = crate::table::make_table_sources(
                 mtm, model, node_id, handler_select, handler_activate,
             );
             unsafe {
                 tv.setDataSource(Some(ProtocolObject::from_ref(&*sources.data)));
                 tv.setDelegate(Some(ProtocolObject::from_ref(&*sources.delegate)));
-                // FR-018: OnActivate is dispatched via tableViewSelectionDidChange + Enter key (AppKit built-in).
+                // FR-018: wire doubleAction to a ButtonTarget for OnActivate.
+                if let Some(h) = handler_activate {
+                    let activate_target = ButtonTarget::with_availability(
+                        mtm, h, node_id, rn_core::data::AvailabilityRule::Always,
+                    );
+                    tv.setDoubleAction(Some(objc2::sel!(fire:)));
+                    let obj: &AnyObject = &activate_target;
+                    tv.setTarget(Some(obj));
+                    // Keep alive via sources.
+                    // ButtonTarget extends NSObject (ClassType::Super = NSObject).
+                    let ns_obj: Retained<objc2::runtime::NSObject> = Retained::cast(activate_target);
+                    sources.activate = Some(ns_obj);
+                }
             }
             // Mount table inside scroll view.
             unsafe { sv.setDocumentView(Some(&*tv)); }
@@ -1854,6 +1871,7 @@ fn create_node(
                 };
                 unsafe {
                     empty_label.setAlignment(objc2_app_kit::NSTextAlignment::Center);
+                    empty_label.setTag(0xE0);
                     sv.addSubview(&empty_label);
                 }
             }
@@ -2463,12 +2481,45 @@ fn update_node(
                                 model.selection.filter_to(&valid);
                             }
                             crate::table::update_table_model(sources, new_model.clone());
+                            // FR-014: toggle empty-state label on live refresh.
+                            let now_empty = new_model.rows.is_empty();
+                            let subviews = unsafe { sv.subviews() };
+                            // Remove any existing empty-state label (identified by tag 0xE0).
+                            for sv_idx in 0..subviews.count() {
+                                let subview = unsafe { subviews.objectAtIndex(sv_idx) };
+                                let tag = unsafe { subview.tag() };
+                                if tag == 0xE0 {
+                                    unsafe { subview.removeFromSuperview() };
+                                    break;
+                                }
+                            }
+                            if now_empty {
+                                if let Some(mtm) = MainThreadMarker::new() {
+                                    let lbl = unsafe {
+                                        NSTextField::labelWithString(&NSString::from_str("No items"), mtm)
+                                    };
+                                    unsafe {
+                                        lbl.setAlignment(objc2_app_kit::NSTextAlignment::Center);
+                                        lbl.setTag(0xE0);
+                                        sv.addSubview(&lbl);
+                                    }
+                                }
+                            }
                             // Reload the embedded NSTableView.
                             let doc = unsafe { sv.documentView() };
                             if let Some(doc) = doc {
                                 let tv: &NSTableView =
                                     unsafe { &*(Retained::as_ptr(&doc) as *const NSTableView) };
+                                // FR-012: remember first visible row before reload.
+                                let visible_rect = unsafe { sv.documentVisibleRect() };
+                                let first_visible_row = unsafe { tv.rowAtPoint(visible_rect.origin) };
                                 unsafe { tv.reloadData() };
+                                // Restore scroll: clamp to new row count.
+                                let new_row_count = unsafe { tv.numberOfRows() };
+                                if new_row_count > 0 && first_visible_row >= 0 {
+                                    let target = first_visible_row.min(new_row_count - 1);
+                                    unsafe { tv.scrollRowToVisible(target) };
+                                }
                             }
                         }
                     });
@@ -4053,6 +4104,10 @@ declare_class!(
             let ivars = self.ivars();
             // Respect the availability rule: Never commands must not fire.
             if ivars.available == rn_core::data::AvailabilityRule::Never { return; }
+            // WhenFlag: check current flag state.
+            if let rn_core::data::AvailabilityRule::WhenFlag(flag_id) = ivars.available {
+                if !crate::commands::flag_is_enabled(flag_id) { return; }
+            }
             log::debug!(
                 "ButtonTarget::fire — handler={:?} source={:?}",
                 ivars.handler,
