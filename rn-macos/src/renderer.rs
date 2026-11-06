@@ -2882,10 +2882,6 @@ fn populate_sidebar(state_cell: &Rc<RefCell<RendererState>>, pane_id: NodeId, pa
         outline.reloadData();
         // Sections start expanded, the way a Finder/Settings source list does.
         outline.expandItem_expandChildren(None, true);
-        // Resize the outline view to fit all rows so the enclosing NSScrollView
-        // can scroll — without this the document view frame stays at its initial
-        // size and scrolling never activates.
-        outline.sizeToFit();
         // Apply the app's initial selection: the row whose Selected prop is true.
         // selectRow is a plain row index into the fully-expanded outline.
         if let Some(row) = model.ivars().initial_selected_row {

@@ -215,14 +215,11 @@ fn main() -> Result<(), rn::RnError> {
                     );
                 }
 
-                // The Sidebar is a vibrancy surface; scrolling is the caller's call.
+                // The Sidebar owns scrolling via NSOutlineView in an NSScrollView.
+                // Just put the section/item nodes directly inside — no extra scroll_view needed.
                 let sidebar = rn::sidebar()
                     .prop(rn::PropKey::SidebarWidth, rn::PropValue::F32(260.0))
-                    .child(
-                        rn::scroll_view()
-                            .child(rn::vstack().padding(6.0).gap(2.0).children(nav_items).build())
-                            .build(),
-                    )
+                    .children(nav_items)
                     .build();
 
                 // ---- Content: header, then one block per demo ----
