@@ -1815,6 +1815,7 @@ fn create_node(
                 };
                 unsafe { ns_col.setWidth(col.width as f64); }
                 unsafe { ns_col.setMinWidth(col.min_width as f64); }
+                unsafe { ns_col.setTitle(&NSString::from_str(&col.title)); }
                 if col.sortable {
                     let desc = unsafe {
                         objc2_foundation::NSSortDescriptor::sortDescriptorWithKey_ascending(
@@ -1844,8 +1845,52 @@ fn create_node(
         }
 
         ComponentKind::Tree => {
+            // Extract TreeModel from props.
+            let model = match props.get(&PropKey::TreeModelKey) {
+                Some(PropValue::TreeModelProp(m)) => m.clone(),
+                _ => rn_core::data::TreeModel::new(vec![]),
+            };
+            let handler_select = match props.get(&PropKey::OnSelect) {
+                Some(PropValue::HandlerRef(h)) => Some(*h),
+                _ => None,
+            };
+            let handler_activate = match props.get(&PropKey::OnActivate) {
+                Some(PropValue::HandlerRef(h)) => Some(*h),
+                _ => None,
+            };
+            // Build NSOutlineView inside a scroll view.
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 300.0));
             let sv = new_scroll_container(mtm, frame, false);
+            let ov: Retained<NSOutlineView> = unsafe {
+                NSOutlineView::initWithFrame(mtm.alloc(), frame)
+            };
+            // Single name column.
+            let col: Retained<NSTableColumn> = unsafe {
+                NSTableColumn::initWithIdentifier(
+                    mtm.alloc(),
+                    &NSString::from_str("name"),
+                )
+            };
+            unsafe {
+                col.setWidth(300.0);
+                ov.addTableColumn(&col);
+                ov.setOutlineTableColumn(Some(&col));
+                ov.setIndentationPerLevel(16.0);
+                ov.setUsesAlternatingRowBackgroundColors(false);
+            }
+            // Create data source + delegate.
+            let sources = crate::tree::make_tree_sources(
+                mtm, model, node_id, handler_select, handler_activate,
+            );
+            unsafe {
+                ov.setDataSource(Some(ProtocolObject::from_ref(&*sources.data)));
+                ov.setDelegate(Some(ProtocolObject::from_ref(&*sources.delegate)));
+            }
+            // Expand all rows that were initially marked expanded.
+            unsafe { ov.expandItem_expandChildren(None, true); }
+            // Mount outline view inside scroll view.
+            unsafe { sv.setDocumentView(Some(&*ov)); }
+            stash_delegate(node_id, DelegateHandle::Tree(sources));
             attach_to_parent(state, parent_id, &sv);
             state.nodes.insert(node_id, NativeHandle::TreeWidget(sv));
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
@@ -4210,6 +4255,8 @@ enum DelegateHandle {
     Commands(Vec<Retained<ButtonTarget>>),
     /// Phase A: NSTableView data source + delegate pair.
     Table(crate::table::TableSources),
+    /// Phase A: NSOutlineView tree data source + delegate pair.
+    Tree(crate::tree::TreeSources),
 }
 
 thread_local! {

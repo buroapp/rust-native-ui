@@ -748,18 +748,45 @@ pub const CATALOG: &[Entry] = &[
     Entry {
         category: "Data",
         name: "Table",
-        summary: "Sortable, resizable column table",
-        build: |_ids| vec![
-            demo("Table (Phase A in progress)", rn::label("Table renders here once Phase A ships.")),
-        ],
+        summary: "Sortable, resizable column table backed by NSTableView",
+        build: |_ids| {
+            use rn::{TableCell, TableColumn, TableModel, TableRow};
+            let cols = vec![
+                TableColumn::new(0, "Name", 160.0).sortable(),
+                TableColumn::new(1, "Score", 80.0).sortable(),
+                TableColumn::new(2, "Status", 100.0),
+            ];
+            let rows = vec![
+                TableRow::new(0, vec![TableCell::text("Alpha"), TableCell::text("98"), TableCell::text("Active")]),
+                TableRow::new(1, vec![TableCell::text("Beta"),  TableCell::text("74"), TableCell::text("Draft")]),
+                TableRow::new(2, vec![TableCell::text("Gamma"), TableCell::text("55"), TableCell::text("Archived")]),
+            ];
+            let model = match TableModel::new(cols, rows) {
+                Ok(m) => m,
+                Err(_) => return vec![demo("Table", rn::label("model error"))],
+            };
+            vec![demo("Three-column sortable table", rn::table(model).build())]
+        },
     },
     Entry {
         category: "Data",
         name: "Tree",
-        summary: "Expandable outline view",
-        build: |_ids| vec![
-            demo("Tree (Phase A in progress)", rn::label("Tree renders here once Phase A ships.")),
-        ],
+        summary: "Expandable outline view backed by NSOutlineView",
+        build: |_ids| {
+            use rn::{TreeModel, TreeNode};
+            let model = TreeModel::new(vec![
+                TreeNode::branch(200, "Documents", vec![
+                    TreeNode::leaf(201, "Report.pdf"),
+                    TreeNode::leaf(202, "Notes.txt"),
+                ]).expanded(),
+                TreeNode::branch(203, "Projects", vec![
+                    TreeNode::leaf(204, "alpha"),
+                    TreeNode::leaf(205, "beta"),
+                ]),
+                TreeNode::leaf(206, "README.md"),
+            ]);
+            vec![demo("Outline view", rn::tree(model).build())]
+        },
     },
 ];
 
