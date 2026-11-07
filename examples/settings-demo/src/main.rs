@@ -137,26 +137,25 @@ fn main() -> Result<(), rn::RnError> {
             });
 
             // ---- Sidebar ----
-            // Pinned header: search, then Apple Account + Family cards
-            // (native ListTile rows with a round avatar tile, not a
-            // sidebar row — these don't scroll with the item list).
-            // Below that: one continuous flat list, no group labels —
-            // that is how System Settings actually lays its sidebar out.
-            let account_row = rn::list_tile("Evgenii Utkin")
+            // Pinned header: just the search field (stays fixed above the
+            // list, like real Settings). Apple Account and Family are now
+            // genuine outline rows — SidebarEntry::Item with a Subtitle and
+            // a round avatar — so AppKit's SourceList style gives them the
+            // exact same leading inset/alignment every category row gets
+            // automatically. They used to be separate pinned ListTile
+            // views with their own hand-picked inset that never quite
+            // matched the outline's own margin.
+            let account_row = rn::sidebar_item("Evgenii Utkin", account_id)
                 .prop(PropKey::Subtitle, PropValue::String("Apple Account".into()))
                 .prop(PropKey::IconName, PropValue::String("person.crop.circle.fill".into()))
                 .icon_color("gray")
                 .icon_shape("circle")
-                .prop(PropKey::ShowChevron, PropValue::Bool(true))
-                .prop(PropKey::OnPress, PropValue::HandlerRef(account_id))
                 .build();
 
-            let family_row = rn::list_tile("Family")
+            let family_row = rn::sidebar_item("Family", family_id)
                 .prop(PropKey::IconName, PropValue::String("person.2.circle.fill".into()))
                 .icon_color("orange")
                 .icon_shape("circle")
-                .prop(PropKey::ShowChevron, PropValue::Bool(true))
-                .prop(PropKey::OnPress, PropValue::HandlerRef(family_id))
                 .build();
 
             let sidebar_items: Vec<rn::Component> = categories

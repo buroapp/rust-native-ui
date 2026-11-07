@@ -3251,10 +3251,18 @@ fn build_sidebar_data(state: &RendererState, sidebar_id: NodeId) -> (SidebarData
                     Some(PropValue::HandlerRef(h)) => Some(*h),
                     _ => None,
                 };
+                let subtitle = match props.get(&PropKey::Subtitle) {
+                    Some(PropValue::String(s)) => Some(s.clone()),
+                    _ => None,
+                };
+                let avatar = matches!(
+                    props.get(&PropKey::IconShape),
+                    Some(PropValue::String(s)) if s == "circle"
+                );
                 if bool_prop(&props, PropKey::Selected, false) {
                     selected_row = Some(entries.len());
                 }
-                entries.push(SidebarEntry::Item { node_id, label, icon, icon_color, handler });
+                entries.push(SidebarEntry::Item { node_id, label, icon, icon_color, handler, subtitle, avatar });
             }
             _ => {}
         }
@@ -4063,7 +4071,20 @@ fn new_document_view(mtm: MainThreadMarker, size: NSSize) -> Retained<NSView> {
 #[derive(Clone)]
 enum SidebarEntry {
     Header { title: String },
-    Item { node_id: NodeId, label: String, icon: Option<String>, icon_color: Option<String>, handler: Option<HandlerId> },
+    Item {
+        node_id: NodeId,
+        label: String,
+        icon: Option<String>,
+        icon_color: Option<String>,
+        handler: Option<HandlerId>,
+        /// Account/Family-style rows: a subtitle line, a round avatar tile
+        /// instead of a squircle, and a taller row — rendered as a genuine
+        /// outline row (not a pinned subview) so AppKit's SourceList style
+        /// gives it the exact same leading inset/alignment every other row
+        /// gets automatically, instead of us trying to replicate it by hand.
+        subtitle: Option<String>,
+        avatar: bool,
+    },
 }
 
 /// NSOutlineView is a pull model — it asks us for children and cells — so the
@@ -4133,6 +4154,9 @@ declare_class!(
         unsafe fn height_of_row(&self, _ov: &NSOutlineView, item: &AnyObject) -> f64 {
             match self.entry(item) {
                 Some(SidebarEntry::Header { .. }) => SIDEBAR_HEADER_ROW_HEIGHT,
+                Some(SidebarEntry::Item { subtitle, avatar, .. }) if subtitle.is_some() || *avatar => {
+                    SIDEBAR_AVATAR_ROW_HEIGHT
+                }
                 _ => SIDEBAR_ITEM_ROW_HEIGHT,
             }
         }
@@ -4148,10 +4172,13 @@ declare_class!(
             match MainThreadMarker::new() {
                 Some(mtm) => match self.entry(item) {
                     Some(SidebarEntry::Header { title }) => {
-                        Some(make_sidebar_label(mtm, title, None, None, true))
+                        Some(make_sidebar_label(mtm, title, None, None, true, None, false))
                     }
-                    Some(SidebarEntry::Item { label, icon, icon_color, .. }) => {
-                        Some(make_sidebar_label(mtm, label, icon.as_deref(), icon_color.as_deref(), false))
+                    Some(SidebarEntry::Item { label, icon, icon_color, subtitle, avatar, .. }) => {
+                        Some(make_sidebar_label(
+                            mtm, label, icon.as_deref(), icon_color.as_deref(), false,
+                            subtitle.as_deref(), *avatar,
+                        ))
                     }
                     None => None,
                 },
@@ -4238,59 +4265,107 @@ const SIDEBAR_ICON_SIZE: f64 = 18.0;
 const SIDEBAR_ICON_TEXT_GAP: f64 = 8.0;
 const SIDEBAR_ITEM_ROW_HEIGHT: f64 = 28.0;
 const SIDEBAR_HEADER_ROW_HEIGHT: f64 = 30.0;
+/// Account/Family-style rows: bigger avatar, two lines of text, taller row —
+/// same leading inset as every other row, just more content.
+const SIDEBAR_AVATAR_ROW_HEIGHT: f64 = 48.0;
+const SIDEBAR_AVATAR_SIZE: f64 = 32.0;
 
+#[allow(clippy::too_many_arguments)]
 fn make_sidebar_label(
     mtm: MainThreadMarker,
     text: &str,
     icon: Option<&str>,
     icon_color: Option<&str>,
     group: bool,
+    subtitle: Option<&str>,
+    avatar: bool,
 ) -> Retained<NSView> {
-    let row_height = if group { SIDEBAR_HEADER_ROW_HEIGHT } else { SIDEBAR_ITEM_ROW_HEIGHT };
+    let row_height = if group {
+        SIDEBAR_HEADER_ROW_HEIGHT
+    } else if avatar || subtitle.is_some() {
+        SIDEBAR_AVATAR_ROW_HEIGHT
+    } else {
+        SIDEBAR_ITEM_ROW_HEIGHT
+    };
     let container = unsafe {
         NSView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(250.0, row_height)))
     };
-    let content_y = (row_height - SIDEBAR_ICON_SIZE) / 2.0;
-    // Group headers align with the same leading edge an item's icon starts
-    // at (small caps, no icon slot of their own); items start their text
-    // after the icon column.
+    let icon_size = if avatar { SIDEBAR_AVATAR_SIZE } else { SIDEBAR_ICON_SIZE };
+    let content_y = (row_height - icon_size) / 2.0;
+    // Every row — header, plain item, or avatar row — starts its icon (or,
+    // for headers, its text) at the exact same leading inset. This was the
+    // whole point of this pass: Account/Family used to be separate pinned
+    // NSViews outside the outline with their own hand-picked inset, which
+    // never matched what AppKit's SourceList style gives every real row
+    // automatically. Folding them into actual outline entries fixes that
+    // at the root instead of trying to replicate AppKit's margin by hand.
     let mut label_x = SIDEBAR_LEADING_INSET;
     if let Some(name) = icon {
         if let Some(image) = unsafe {
             NSImage::imageWithSystemSymbolName_accessibilityDescription(&NSString::from_str(name), None)
         } {
             let tint = match icon_color {
-                // macOS System Settings sidebar: the glyph itself carries the
-                // category color (blue Wi-Fi, green battery, red bell). No tile.
                 Some(tint_name) => icon_tint(tint_name),
-                // Default label color (toolbars, generic rows).
                 None => unsafe { NSColor::labelColor() },
             };
-            let iv = unsafe {
-                NSImageView::initWithFrame(
-                    mtm.alloc(),
-                    NSRect::new(
-                        NSPoint::new(SIDEBAR_LEADING_INSET, content_y),
-                        NSSize::new(SIDEBAR_ICON_SIZE, SIDEBAR_ICON_SIZE),
-                    ),
-                )
-            };
-            unsafe {
-                iv.setImage(Some(&image));
-                iv.setContentTintColor(Some(&tint));
-                container.addSubview(&iv);
+            if avatar {
+                // A round filled tile (avatar silhouette / family glyph),
+                // the same treatment ListTile uses for Account-style rows,
+                // just at the sidebar's own leading inset.
+                let tile = unsafe {
+                    NSBox::initWithFrame(
+                        mtm.alloc(),
+                        NSRect::new(NSPoint::new(SIDEBAR_LEADING_INSET, content_y), NSSize::new(icon_size, icon_size)),
+                    )
+                };
+                unsafe {
+                    tile.setBoxType(NSBoxType::NSBoxCustom);
+                    tile.setCornerRadius(icon_size / 2.0);
+                    tile.setFillColor(&tint);
+                    tile.setBorderWidth(0.0);
+                    tile.setContentViewMargins(NSSize::new(0.0, 0.0));
+                }
+                let inner = NSRect::new(
+                    NSPoint::new(icon_size * 0.22, icon_size * 0.22),
+                    NSSize::new(icon_size * 0.56, icon_size * 0.56),
+                );
+                let glyph: Retained<NSImageView> = unsafe {
+                    let v = NSImageView::initWithFrame(mtm.alloc(), inner);
+                    v.setImageScaling(objc2_app_kit::NSImageScaling::NSImageScaleProportionallyUpOrDown);
+                    v
+                };
+                unsafe {
+                    image.setTemplate(true);
+                    glyph.setImage(Some(&image));
+                    glyph.setContentTintColor(Some(&NSColor::whiteColor()));
+                    if let Some(cv) = tile.contentView() {
+                        cv.addSubview(&glyph);
+                    }
+                    container.addSubview(&tile);
+                }
+            } else {
+                let iv = unsafe {
+                    NSImageView::initWithFrame(
+                        mtm.alloc(),
+                        NSRect::new(NSPoint::new(SIDEBAR_LEADING_INSET, content_y), NSSize::new(icon_size, icon_size)),
+                    )
+                };
+                unsafe {
+                    iv.setImage(Some(&image));
+                    iv.setContentTintColor(Some(&tint));
+                    container.addSubview(&iv);
+                }
             }
-            label_x = SIDEBAR_LEADING_INSET + SIDEBAR_ICON_SIZE + SIDEBAR_ICON_TEXT_GAP;
+            label_x = SIDEBAR_LEADING_INSET + icon_size + SIDEBAR_ICON_TEXT_GAP;
         }
     }
-    let label = unsafe {
-        NSTextField::labelWithString(&NSString::from_str(text), mtm)
-    };
+
+    let trailing = if avatar || subtitle.is_some() { SIDEBAR_ICON_SIZE } else { SIDEBAR_LEADING_INSET };
+    let label_width = 250.0 - label_x - trailing;
+    let label = unsafe { NSTextField::labelWithString(&NSString::from_str(text), mtm) };
+    let label_y = if subtitle.is_some() { content_y + 10.0 } else { content_y };
     unsafe {
-        label.setFrame(NSRect::new(
-            NSPoint::new(label_x, content_y),
-            NSSize::new(250.0 - label_x - SIDEBAR_LEADING_INSET, SIDEBAR_ICON_SIZE),
-        ));
+        label.setFrame(NSRect::new(NSPoint::new(label_x, label_y), NSSize::new(label_width, SIDEBAR_ICON_SIZE)));
         label.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
         label.setBordered(false);
         label.setDrawsBackground(false);
@@ -4302,6 +4377,40 @@ fn make_sidebar_label(
         }
         container.addSubview(&label);
     }
+
+    if let Some(sub) = subtitle {
+        let stf = unsafe { NSTextField::labelWithString(&NSString::from_str(sub), mtm) };
+        unsafe {
+            stf.setFrame(NSRect::new(NSPoint::new(label_x, content_y - 8.0), NSSize::new(label_width, 14.0)));
+            stf.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
+            stf.setBordered(false);
+            stf.setDrawsBackground(false);
+            stf.setFont(Some(&NSFont::systemFontOfSize(NSFont::smallSystemFontSize())));
+            stf.setTextColor(Some(&NSColor::secondaryLabelColor()));
+            container.addSubview(&stf);
+        }
+    }
+
+    // Avatar/subtitle rows always navigate somewhere (Account, Family) —
+    // the trailing disclosure chevron the real app always shows for them.
+    if avatar || subtitle.is_some() {
+        let chev_frame = NSRect::new(
+            NSPoint::new(250.0 - SIDEBAR_ICON_SIZE - 2.0, (row_height - 14.0) / 2.0),
+            NSSize::new(14.0, 14.0),
+        );
+        let civ: Retained<NSImageView> = unsafe { NSImageView::initWithFrame(mtm.alloc(), chev_frame) };
+        if let Some(img) = unsafe {
+            NSImage::imageWithSystemSymbolName_accessibilityDescription(&NSString::from_str("chevron.right"), None)
+        } {
+            unsafe { civ.setImage(Some(&img)) }
+        }
+        unsafe {
+            civ.setContentTintColor(Some(&NSColor::tertiaryLabelColor()));
+            civ.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewMinXMargin);
+            container.addSubview(&civ);
+        }
+    }
+
     container
 }
 
