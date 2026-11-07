@@ -2291,6 +2291,12 @@ fn create_node(
                 outline.setHeaderView(None);
                 outline.setFloatsGroupRows(false);
                 outline.setIndentationPerLevel(0.0);
+                // Default NSTableColumn width (~100pt) has no relation to the
+                // sidebar's actual width — every row truncated regardless of
+                // how wide the sidebar really is. apply_rects keeps this in
+                // sync on every relayout; this is just the initial value so
+                // the very first paint isn't wrong too.
+                column.setWidth(width as f64 - 4.0);
                 outline.addTableColumn(&column);
                 outline.setOutlineTableColumn(Some(&column));
                 scroll.setDocumentView(Some(&outline));
@@ -3779,6 +3785,17 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
                         bottom: 0.0,
                         right: 0.0,
                     });
+                    // The outline's single column has no automatic tie to the
+                    // sidebar's actual width — left at NSTableColumn's ~100pt
+                    // default, every row's text truncated regardless of the
+                    // real column. Keep it in sync here too.
+                    if let Some(doc) = sv.documentView() {
+                        let ov: &NSOutlineView = &*(Retained::as_ptr(&doc) as *const NSOutlineView);
+                        let cols = ov.tableColumns();
+                        if let Some(col) = cols.firstObject() {
+                            col.setWidth(sv.frame().size.width - 4.0);
+                        }
+                    }
                 }
             }
         }
@@ -4115,8 +4132,8 @@ declare_class!(
         #[method(outlineView:heightOfRowByItem:)]
         unsafe fn height_of_row(&self, _ov: &NSOutlineView, item: &AnyObject) -> f64 {
             match self.entry(item) {
-                Some(SidebarEntry::Header { .. }) => 30.0,
-                _ => 28.0,
+                Some(SidebarEntry::Header { .. }) => SIDEBAR_HEADER_ROW_HEIGHT,
+                _ => SIDEBAR_ITEM_ROW_HEIGHT,
             }
         }
 
@@ -4208,6 +4225,20 @@ fn icon_tint(name: &str) -> Retained<NSColor> {
     }
 }
 
+/// Shared sidebar row metrics — one leading inset and icon size for every
+/// row kind, so a group header's text and an item's icon start at exactly
+/// the same x, and icon/text sit vertically centered in whatever the row's
+/// actual height is (28pt items, 30pt headers — see `height_of_row`). Before
+/// this, headers used a hand-picked x=8 while items used x=2 for their
+/// icon, and both icon/label used fixed y values sized for a 24pt frame
+/// that the outline then stretched to 28/30 without recentering — the
+/// "padding and margin is not the same" the user was pointing at.
+const SIDEBAR_LEADING_INSET: f64 = 4.0;
+const SIDEBAR_ICON_SIZE: f64 = 18.0;
+const SIDEBAR_ICON_TEXT_GAP: f64 = 8.0;
+const SIDEBAR_ITEM_ROW_HEIGHT: f64 = 28.0;
+const SIDEBAR_HEADER_ROW_HEIGHT: f64 = 30.0;
+
 fn make_sidebar_label(
     mtm: MainThreadMarker,
     text: &str,
@@ -4215,50 +4246,52 @@ fn make_sidebar_label(
     icon_color: Option<&str>,
     group: bool,
 ) -> Retained<NSView> {
+    let row_height = if group { SIDEBAR_HEADER_ROW_HEIGHT } else { SIDEBAR_ITEM_ROW_HEIGHT };
     let container = unsafe {
-        NSView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(250.0, 24.0)))
+        NSView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(250.0, row_height)))
     };
-    // Group headers align with the leading edge (small caps, no icon slot);
-    // items start their text after the icon column.
-    let mut label_x = if group { 8.0 } else { 2.0 };
+    let content_y = (row_height - SIDEBAR_ICON_SIZE) / 2.0;
+    // Group headers align with the same leading edge an item's icon starts
+    // at (small caps, no icon slot of their own); items start their text
+    // after the icon column.
+    let mut label_x = SIDEBAR_LEADING_INSET;
     if let Some(name) = icon {
         if let Some(image) = unsafe {
             NSImage::imageWithSystemSymbolName_accessibilityDescription(&NSString::from_str(name), None)
         } {
-            match icon_color {
+            let tint = match icon_color {
                 // macOS System Settings sidebar: the glyph itself carries the
                 // category color (blue Wi-Fi, green battery, red bell). No tile.
-                Some(tint_name) => {
-                    let iv = unsafe {
-                        NSImageView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(2.0, 3.0), NSSize::new(18.0, 18.0)))
-                    };
-                    unsafe {
-                        iv.setImage(Some(&image));
-                        iv.setContentTintColor(Some(&icon_tint(tint_name)));
-                        container.addSubview(&iv);
-                    }
-                    label_x = 26.0;
-                }
+                Some(tint_name) => icon_tint(tint_name),
                 // Default label color (toolbars, generic rows).
-                None => {
-                    let iv = unsafe {
-                        NSImageView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(2.0, 3.0), NSSize::new(18.0, 18.0)))
-                    };
-                    unsafe {
-                        iv.setImage(Some(&image));
-                        iv.setContentTintColor(Some(&NSColor::labelColor()));
-                        container.addSubview(&iv);
-                    }
-                    label_x = 26.0;
-                }
+                None => unsafe { NSColor::labelColor() },
+            };
+            let iv = unsafe {
+                NSImageView::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(
+                        NSPoint::new(SIDEBAR_LEADING_INSET, content_y),
+                        NSSize::new(SIDEBAR_ICON_SIZE, SIDEBAR_ICON_SIZE),
+                    ),
+                )
+            };
+            unsafe {
+                iv.setImage(Some(&image));
+                iv.setContentTintColor(Some(&tint));
+                container.addSubview(&iv);
             }
+            label_x = SIDEBAR_LEADING_INSET + SIDEBAR_ICON_SIZE + SIDEBAR_ICON_TEXT_GAP;
         }
     }
     let label = unsafe {
         NSTextField::labelWithString(&NSString::from_str(text), mtm)
     };
     unsafe {
-        label.setFrame(NSRect::new(NSPoint::new(label_x, 2.0), NSSize::new(250.0 - label_x - 4.0, 18.0)));
+        label.setFrame(NSRect::new(
+            NSPoint::new(label_x, content_y),
+            NSSize::new(250.0 - label_x - SIDEBAR_LEADING_INSET, SIDEBAR_ICON_SIZE),
+        ));
+        label.setAutoresizingMask(NSAutoresizingMaskOptions::NSViewWidthSizable);
         label.setBordered(false);
         label.setDrawsBackground(false);
         if group {
