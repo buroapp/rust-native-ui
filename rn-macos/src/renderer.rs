@@ -3816,6 +3816,26 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
             NSPoint::new(local_x as f64, flipped_y as f64),
             NSSize::new(rect.width as f64, rect.height as f64),
         );
+        // A divider between rows inside a grouped card is slightly inset
+        // from the card's edges, not full-bleed — measured directly from
+        // the real app: divider spans the card width minus ~10pt on each
+        // side (262..709 inside a 252..719 card), not edge-to-edge and
+        // not aligned to the row's text column either.
+        let is_grouped_divider = matches!(
+            state.shadow.get(&node_id).map(|sn| sn.kind),
+            Some(ComponentKind::Separator)
+        ) && shadow_parent_id.is_some_and(|pid| {
+            matches!(state.shadow.get(&pid).map(|sn| sn.kind), Some(ComponentKind::GroupedSection))
+        });
+        let ns = if is_grouped_divider {
+            const DIVIDER_INSET: f64 = 10.0;
+            NSRect::new(
+                NSPoint::new(ns.origin.x + DIVIDER_INSET, ns.origin.y),
+                NSSize::new((ns.size.width - DIVIDER_INSET * 2.0).max(0.0), ns.size.height),
+            )
+        } else {
+            ns
+        };
         log::trace!(
             "setFrame {:?} → x={:.0} y={:.0} w={:.0} h={:.0} (abs:{:.0},{:.0} parent:{:?})",
             node_id, local_x, flipped_y, rect.width, rect.height,
