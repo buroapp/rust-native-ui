@@ -4261,14 +4261,23 @@ fn icon_tint(name: &str) -> Retained<NSColor> {
 /// that the outline then stretched to 28/30 without recentering — the
 /// "padding and margin is not the same" the user was pointing at.
 const SIDEBAR_LEADING_INSET: f64 = 4.0;
-const SIDEBAR_ICON_SIZE: f64 = 18.0;
+// Measured against the real System Settings sidebar (pixel-scanned a
+// screenshot of the live app, not guessed): 20pt square icon tiles, 32pt
+// item rows. Every category icon — including gray ones like General — is
+// a colored squircle tile with a white glyph, never a bare tinted glyph;
+// that was the dominant visual gap, bigger than any inset tuning.
+const SIDEBAR_ICON_SIZE: f64 = 20.0;
 const SIDEBAR_ICON_TEXT_GAP: f64 = 8.0;
-const SIDEBAR_ITEM_ROW_HEIGHT: f64 = 28.0;
-const SIDEBAR_HEADER_ROW_HEIGHT: f64 = 30.0;
+const SIDEBAR_ITEM_ROW_HEIGHT: f64 = 32.0;
+const SIDEBAR_HEADER_ROW_HEIGHT: f64 = 34.0;
 /// Account/Family-style rows: bigger avatar, two lines of text, taller row —
 /// same leading inset as every other row, just more content.
-const SIDEBAR_AVATAR_ROW_HEIGHT: f64 = 48.0;
-const SIDEBAR_AVATAR_SIZE: f64 = 32.0;
+const SIDEBAR_AVATAR_ROW_HEIGHT: f64 = 52.0;
+const SIDEBAR_AVATAR_SIZE: f64 = 30.0;
+/// Squircle corner radius for a sidebar icon tile, proportional to the real
+/// app's ratio (measured ~0.2-0.25 of tile size, matching the content
+/// header tile's 13/56 ratio).
+const SIDEBAR_TILE_CORNER_RADIUS: f64 = 4.5;
 
 #[allow(clippy::too_many_arguments)]
 fn make_sidebar_label(
@@ -4306,55 +4315,44 @@ fn make_sidebar_label(
         } {
             let tint = match icon_color {
                 Some(tint_name) => icon_tint(tint_name),
-                None => unsafe { NSColor::labelColor() },
+                None => icon_tint("gray"),
             };
-            if avatar {
-                // A round filled tile (avatar silhouette / family glyph),
-                // the same treatment ListTile uses for Account-style rows,
-                // just at the sidebar's own leading inset.
-                let tile = unsafe {
-                    NSBox::initWithFrame(
-                        mtm.alloc(),
-                        NSRect::new(NSPoint::new(SIDEBAR_LEADING_INSET, content_y), NSSize::new(icon_size, icon_size)),
-                    )
-                };
-                unsafe {
-                    tile.setBoxType(NSBoxType::NSBoxCustom);
-                    tile.setCornerRadius(icon_size / 2.0);
-                    tile.setFillColor(&tint);
-                    tile.setBorderWidth(0.0);
-                    tile.setContentViewMargins(NSSize::new(0.0, 0.0));
+            // Every sidebar icon — avatar circle or category squircle — is a
+            // colored filled tile with a white glyph, never a bare tinted
+            // glyph. Confirmed by pixel-measuring the real System Settings
+            // app: even the "neutral" General icon sits on a light gray
+            // tile, not a plain glyph with no background at all.
+            let corner_radius = if avatar { icon_size / 2.0 } else { SIDEBAR_TILE_CORNER_RADIUS };
+            let tile = unsafe {
+                NSBox::initWithFrame(
+                    mtm.alloc(),
+                    NSRect::new(NSPoint::new(SIDEBAR_LEADING_INSET, content_y), NSSize::new(icon_size, icon_size)),
+                )
+            };
+            unsafe {
+                tile.setBoxType(NSBoxType::NSBoxCustom);
+                tile.setCornerRadius(corner_radius);
+                tile.setFillColor(&tint);
+                tile.setBorderWidth(0.0);
+                tile.setContentViewMargins(NSSize::new(0.0, 0.0));
+            }
+            let inner = NSRect::new(
+                NSPoint::new(icon_size * 0.22, icon_size * 0.22),
+                NSSize::new(icon_size * 0.56, icon_size * 0.56),
+            );
+            let glyph: Retained<NSImageView> = unsafe {
+                let v = NSImageView::initWithFrame(mtm.alloc(), inner);
+                v.setImageScaling(objc2_app_kit::NSImageScaling::NSImageScaleProportionallyUpOrDown);
+                v
+            };
+            unsafe {
+                image.setTemplate(true);
+                glyph.setImage(Some(&image));
+                glyph.setContentTintColor(Some(&NSColor::whiteColor()));
+                if let Some(cv) = tile.contentView() {
+                    cv.addSubview(&glyph);
                 }
-                let inner = NSRect::new(
-                    NSPoint::new(icon_size * 0.22, icon_size * 0.22),
-                    NSSize::new(icon_size * 0.56, icon_size * 0.56),
-                );
-                let glyph: Retained<NSImageView> = unsafe {
-                    let v = NSImageView::initWithFrame(mtm.alloc(), inner);
-                    v.setImageScaling(objc2_app_kit::NSImageScaling::NSImageScaleProportionallyUpOrDown);
-                    v
-                };
-                unsafe {
-                    image.setTemplate(true);
-                    glyph.setImage(Some(&image));
-                    glyph.setContentTintColor(Some(&NSColor::whiteColor()));
-                    if let Some(cv) = tile.contentView() {
-                        cv.addSubview(&glyph);
-                    }
-                    container.addSubview(&tile);
-                }
-            } else {
-                let iv = unsafe {
-                    NSImageView::initWithFrame(
-                        mtm.alloc(),
-                        NSRect::new(NSPoint::new(SIDEBAR_LEADING_INSET, content_y), NSSize::new(icon_size, icon_size)),
-                    )
-                };
-                unsafe {
-                    iv.setImage(Some(&image));
-                    iv.setContentTintColor(Some(&tint));
-                    container.addSubview(&iv);
-                }
+                container.addSubview(&tile);
             }
             label_x = SIDEBAR_LEADING_INSET + icon_size + SIDEBAR_ICON_TEXT_GAP;
         }
