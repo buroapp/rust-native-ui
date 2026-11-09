@@ -43,6 +43,7 @@ use objc2_app_kit::{
     NSTableViewStyle,
     NSTitlebarAccessoryViewController,
     NSLayoutAttribute,
+    NSVisualEffectView, NSVisualEffectMaterial, NSVisualEffectBlendingMode, NSVisualEffectState,
 };
 // Phase 2 extra imports for RichText attributed string rendering (FR-008)
 use objc2_app_kit::{NSFont, NSFontManager, NSForegroundColorAttributeName, NSFontAttributeName};
@@ -320,6 +321,12 @@ struct RendererState {
     /// the outline's own rows started scrolling up underneath it — a
     /// one-shot setContentInsets that nothing ever re-applied.
     sidebar_top_insets: HashMap<NodeId, f64>,
+    /// The vibrancy/blur layer sitting behind each Sidebar's NSScrollView
+    /// (NSVisualEffectView, `.sidebar` material) — a real System Settings
+    /// sidebar is translucent, not a flat fill. apply_rects keeps its
+    /// frame synced to the scroll view's on every relayout, same pattern
+    /// as sidebar_top_insets above.
+    sidebar_backgrounds: HashMap<NodeId, Retained<NSVisualEffectView>>,
 }
 
 impl RendererState {
@@ -334,6 +341,7 @@ impl RendererState {
             presented_sheets: std::cell::RefCell::new(std::collections::HashSet::new()),
             split_panes: HashMap::new(),
             sidebar_top_insets: HashMap::new(),
+            sidebar_backgrounds: HashMap::new(),
         }
     }
 }
@@ -2277,11 +2285,31 @@ fn create_node(
         ComponentKind::Sidebar => {
             let width = f32_prop(&props, PropKey::SidebarWidth, 220.0);
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, 400.0));
+            // Real System Settings' sidebar is translucent — a blurred
+            // vibrancy layer sitting behind the outline, not a flat
+            // color fill. NSVisualEffectView with the `.sidebar` material
+            // is exactly AppKit's own answer to this; without it we were
+            // just painting a solid background and calling it done.
+            let effect: Retained<NSVisualEffectView> = unsafe { NSVisualEffectView::initWithFrame(mtm.alloc(), frame) };
+            unsafe {
+                effect.setMaterial(NSVisualEffectMaterial::Sidebar);
+                effect.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
+                // Active (not FollowsWindowActiveState) forces the blur to
+                // always compute regardless of key/focus state — ruling
+                // out window-activation timing as a variable while we
+                // verify the blend is actually taking effect at all.
+                effect.setState(NSVisualEffectState::Active);
+            }
             // A source list is an NSOutlineView in a scroll view. The outline's
             // rows, cells, selection, keyboard nav and disclosure are AppKit's; we
             // only supply the data (populated at promote time, once the item/section
             // children have been created). The scroll view is the sidebar's view.
             let scroll = new_scroll_container(mtm, frame, false);
+            unsafe {
+                // Let the vibrancy layer behind it show through instead of
+                // painting its own opaque background on top of it.
+                scroll.setDrawsBackground(false);
+            }
             let outline: Retained<NSOutlineView> = unsafe { NSOutlineView::new(mtm) };
             let column = unsafe {
                 NSTableColumn::initWithIdentifier(mtm.alloc(), &NSString::from_str("main"))
@@ -2291,6 +2319,7 @@ fn create_node(
                 outline.setHeaderView(None);
                 outline.setFloatsGroupRows(false);
                 outline.setIndentationPerLevel(0.0);
+                outline.setBackgroundColor(&NSColor::clearColor());
                 // Default NSTableColumn width (~100pt) has no relation to the
                 // sidebar's actual width — every row truncated regardless of
                 // how wide the sidebar really is. apply_rects keeps this in
@@ -2301,8 +2330,12 @@ fn create_node(
                 outline.setOutlineTableColumn(Some(&column));
                 scroll.setDocumentView(Some(&outline));
             }
+            // Order matters: the vibrancy layer goes in first so the scroll
+            // view (with its now-transparent background) draws on top of it.
+            attach_to_parent(state, parent_id, &effect);
             attach_to_parent(state, parent_id, &scroll);
             state.nodes.insert(node_id, NativeHandle::SidebarWidget(unsafe { Retained::cast(scroll) }));
+            state.sidebar_backgrounds.insert(node_id, effect);
             state.shadow.insert(node_id, ShadowNode::new(kind, props, parent_id));
             register_child(state, parent_id, node_id);
         }
@@ -3054,6 +3087,19 @@ fn promote_split_window(state_cell: &Rc<RefCell<RendererState>>, window_id: Node
     let split_controller = unsafe { NSSplitViewController::new(mtm) };
     let mut recorded: Vec<(NodeId, Retained<NSView>)> = Vec::new();
 
+    // The sidebar's NSVisualEffectView uses .behindWindow blending, which
+    // only actually samples content behind the WINDOW (not just behind
+    // sibling views) when the window itself is non-opaque. A normal
+    // opaque window blocks the blend even though the vibrancy view is
+    // correctly configured — this is the standard AppKit gotcha for
+    // sidebar-style vibrancy, confirmed by comparing identical sidebar
+    // pixels with two different backgrounds behind the window before
+    // this fix (no difference at all).
+    unsafe {
+        window.setOpaque(false);
+        window.setBackgroundColor(Some(&NSColor::clearColor()));
+    }
+
     for (idx, (pane_id, pane_view)) in pane_views.into_iter().enumerate() {
         unsafe { pane_view.removeFromSuperview() };
         let vc = unsafe { NSViewController::new(mtm) };
@@ -3773,6 +3819,13 @@ fn apply_rects(state: &RendererState, content_view: &NSView, result: &rn_layout:
             rect.x, rect.y, shadow_parent_id
         );
         unsafe { view.setFrame(ns) };
+
+        // Keep the sidebar's vibrancy layer the same size as its scroll
+        // view on every relayout — it's a separate sibling view, not a
+        // subview that would auto-track via an autoresizing mask.
+        if let Some(effect) = state.sidebar_backgrounds.get(&node_id) {
+            unsafe { effect.setFrame(ns) };
+        }
 
         // Re-assert the sidebar's reserved header-band inset every relayout.
         // setFrame touches the scroll view on every single rerender, even
