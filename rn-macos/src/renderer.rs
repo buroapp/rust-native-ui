@@ -1231,7 +1231,7 @@ fn create_node(
         // ListTile — settings row: icon tile + title + subtitle + chevron
         // ------------------------------------------------------------------
         ComponentKind::ListTile => {
-            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 44.0));
+            let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 50.0));
             let row: Retained<NSView> = unsafe { NSView::initWithFrame(mtm.alloc(), frame) };
             populate_list_tile(mtm, &row, node_id, &props);
             attach_to_parent(state, parent_id, &row);
@@ -2522,7 +2522,7 @@ fn populate_list_tile(mtm: MainThreadMarker, row: &NSView, node_id: NodeId, prop
             Some(PropValue::String(s)) if s == "circle"
         );
         let tile_size: f64 = if is_circle { 32.0 } else { 26.0 };
-        let tile_origin = NSPoint::new(12.0, (44.0 - tile_size) / 2.0);
+        let tile_origin = NSPoint::new(12.0, (50.0 - tile_size) / 2.0);
 
         if let Some(tint_name) = tint {
             let tile = unsafe {
@@ -2592,7 +2592,7 @@ fn populate_list_tile(mtm: MainThreadMarker, row: &NSView, node_id: NodeId, prop
     let title_y = if has_subtitle {
         24.0
     } else {
-        (44.0 - title_h) / 2.0
+        (50.0 - title_h) / 2.0
     };
     let tf: Retained<NSTextField> = unsafe {
         let t = NSTextField::initWithFrame(
@@ -2620,7 +2620,7 @@ fn populate_list_tile(mtm: MainThreadMarker, row: &NSView, node_id: NodeId, prop
             let t = NSTextField::initWithFrame(
                 mtm.alloc(),
                 NSRect::new(
-                    NSPoint::new(text_x, 8.0),
+                    NSPoint::new(text_x, 9.0),
                     NSSize::new(400.0 - text_x - 40.0, 14.0),
                 ),
             );
@@ -2639,7 +2639,7 @@ fn populate_list_tile(mtm: MainThreadMarker, row: &NSView, node_id: NodeId, prop
 
     // Trailing disclosure chevron
     if bool_prop(props, PropKey::ShowChevron, true) {
-        let chev_frame = NSRect::new(NSPoint::new(400.0 - 26.0, 14.0), NSSize::new(16.0, 16.0));
+        let chev_frame = NSRect::new(NSPoint::new(400.0 - 26.0, 17.0), NSSize::new(16.0, 16.0));
         let civ: Retained<NSImageView> = unsafe { NSImageView::initWithFrame(mtm.alloc(), chev_frame) };
         let ns_name = NSString::from_str("chevron.right");
         if let Some(img) = unsafe {
@@ -2660,7 +2660,7 @@ fn populate_list_tile(mtm: MainThreadMarker, row: &NSView, node_id: NodeId, prop
         unsafe {
             let btn: Retained<NSButton> = NSButton::initWithFrame(
                 mtm.alloc(),
-                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 44.0)),
+                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 50.0)),
             );
             btn.setBezelStyle(NSBezelStyle::Automatic);
             btn.setBordered(false);
@@ -3559,7 +3559,10 @@ fn build_spec(state: &RendererState, node_id: NodeId) -> Option<LayoutSpec> {
         ComponentKind::StatusBar => (None, Some(22.0)),
         ComponentKind::SidebarItem => (None, Some(28.0)),
         ComponentKind::SidebarSection => (None, Some(18.0)),
-        ComponentKind::ListTile => (None, Some(44.0)),               
+        // Measured against the real System Settings content rows
+        // (About/Software Update/Storage): 50pt row height, not the 44pt
+        // we had — a real, visible gap once you compare side by side.
+        ComponentKind::ListTile => (None, Some(50.0)),               
         ComponentKind::TitleBar => (None, Some(28.0)),               
         ComponentKind::IconButton => (Some(28.0), Some(28.0)),
         ComponentKind::DisclosureButton => (None, Some(20.0)),
