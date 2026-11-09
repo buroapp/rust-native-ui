@@ -122,6 +122,33 @@ fn main() -> Result<(), rn::RnError> {
         ("Printers & Scanners", "printer.fill",                         "gray"),
     ];
 
+    // Real System Settings shows a one-line description under every page
+    // title, centered, secondary color. Order matches `categories` above.
+    let descriptions: &[&str] = &[
+        "Manage your overall setup and preferences for Mac, such as software updates, device language, AirDrop and more.",
+        "Connect to Wi-Fi networks and manage known networks.",
+        "Connect and manage Bluetooth devices.",
+        "Configure network interfaces, VPN, and proxy settings.",
+        "Choose how notifications are shown for apps and system features.",
+        "Set alert sounds, output and input devices, and sound effects.",
+        "Limit interruptions and allow only the notifications you want.",
+        "Track and manage how you spend time on your devices.",
+        "Choose when your Mac locks and what shows on the lock screen.",
+        "Choose a light or dark appearance and accent color.",
+        "Make your Mac easier to see, hear, and interact with.",
+        "Quickly change settings like Wi-Fi, volume, and display.",
+        "Use your voice to ask for things and search your Mac.",
+        "Control access to your data and manage security features.",
+        "Arrange your desktop, Dock, and Stage Manager.",
+        "Arrange displays and configure resolution and color.",
+        "Choose a desktop picture or screen saver.",
+        "Check battery health and configure energy settings.",
+        "Customize how your keyboard looks and behaves.",
+        "Adjust mouse tracking speed and button behavior.",
+        "Adjust trackpad gestures and tracking speed.",
+        "Add and manage printers and scanners.",
+    ];
+
     let mut cat_ids: Vec<HandlerId> = Vec::new();
     for i in 0..categories.len() {
         let id = HandlerId::new();
@@ -185,6 +212,7 @@ fn main() -> Result<(), rn::RnError> {
 
             // ---- Content ----
             let (page_title, page_icon, page_color) = categories[s.selected];
+            let page_desc = descriptions[s.selected];
 
             // Content-row icons use the same small colored tile treatment
             // the real app uses for About/Software Update/Storage/etc.
@@ -209,11 +237,22 @@ fn main() -> Result<(), rn::RnError> {
                 // Back/forward pill, top-left — a real NSSegmentedControl.
                 .child(rn::back_forward_control(nav_id).build())
                 .child(
-                    rn::hstack().gap(10.0).align_center()
+                    // Real System Settings centers the whole header block —
+                    // icon on top, bold title under it, a short description
+                    // under that — not icon-beside-title left-aligned like
+                    // we originally built it. Measured directly against the
+                    // live app: icon and title both sit on the content
+                    // pane's horizontal center.
+                    rn::vstack().align_center().gap(8.0)
                         .child(rn::image(page_icon).icon_color(page_color).build())
-                        .child(rn::vstack().flex(1.0)
-                            .child(rn::label_builder(page_title).flex(1.0).build())
-                            .build())
+                        .child(rn::label_builder(page_title).text_center().build())
+                        .child(
+                            rn::label_builder(page_desc)
+                                .text_center()
+                                .lines(3)
+                                .prop(PropKey::Width, PropValue::F32(440.0))
+                                .build(),
+                        )
                         .build()
                 )
                 .child(rn::separator());
