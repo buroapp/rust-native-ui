@@ -93,28 +93,33 @@ fn main() -> Result<(), rn::RnError> {
     // (label, SF Symbol, tile tint) — names, order, and colors mirror the
     // real Settings sidebar list.
     let categories: &[(&str, &str, &str)] = &[
-        ("General",             "gearshape",              "gray"),
-        ("Wi-Fi",               "wifi",                   "blue"),
-        ("Bluetooth",           "wave.3.right",           "blue"),
-        ("Network",             "globe",                  "blue"),
-        ("Notifications",       "bell.badge",             "red"),
-        ("Sound",               "speaker.wave.2",         "pink"),
-        ("Focus",               "moon.fill",              "indigo"),
-        ("Screen Time",         "hourglass",              "blue"),
-        ("Lock Screen",         "lock",                    "gray"),
-        ("Appearance",          "paintpalette",           "teal"),
-        ("Accessibility",       "figure.wave",            "blue"),
-        ("Control Center",      "switch.2",               "gray"),
-        ("Siri & Spotlight",    "mic",                    "purple"),
-        ("Privacy & Security",  "lock.shield",             "blue"),
-        ("Desktop & Dock",      "menubar.dock.rectangle", "blue"),
-        ("Displays",            "display",                "gray"),
-        ("Wallpaper",           "photo",                   "teal"),
-        ("Battery",             "battery.100",             "green"),
-        ("Keyboard",            "keyboard",                "gray"),
-        ("Mouse",               "computermouse",           "gray"),
-        ("Trackpad",            "trackpad",                "gray"),
-        ("Printers & Scanners", "printer",                 "gray"),
+        // Every name below was verified to actually resolve via
+        // NSImage.imageWithSystemSymbolName (checked live against this
+        // machine's SF Symbols catalog, not guessed) and swapped to a
+        // solid `.fill` variant where one exists, since every real
+        // Settings tile glyph is a solid silhouette, never an outline.
+        ("General",             "gearshape.fill",                       "gray"),
+        ("Wi-Fi",               "wifi",                                 "blue"),
+        ("Bluetooth",           "dot.radiowaves.left.and.right",        "blue"),
+        ("Network",             "network",                              "blue"),
+        ("Notifications",       "bell.badge.fill",                      "red"),
+        ("Sound",               "speaker.wave.2.fill",                  "pink"),
+        ("Focus",               "moon.fill",                            "indigo"),
+        ("Screen Time",         "hourglass",                            "blue"),
+        ("Lock Screen",         "lock.fill",                            "gray"),
+        ("Appearance",          "paintpalette.fill",                    "teal"),
+        ("Accessibility",       "accessibility",                       "blue"),
+        ("Control Center",      "switch.2",                             "gray"),
+        ("Siri & Spotlight",    "waveform.and.magnifyingglass",         "purple"),
+        ("Privacy & Security",  "lock.shield.fill",                     "blue"),
+        ("Desktop & Dock",      "menubar.dock.rectangle",               "blue"),
+        ("Displays",            "display",                              "gray"),
+        ("Wallpaper",           "photo.fill",                           "teal"),
+        ("Battery",             "battery.100",                          "green"),
+        ("Keyboard",            "keyboard.fill",                        "gray"),
+        ("Mouse",               "computermouse.fill",                   "gray"),
+        ("Trackpad",            "rectangle.and.hand.point.up.left.fill", "gray"),
+        ("Printers & Scanners", "printer.fill",                         "gray"),
     ];
 
     let mut cat_ids: Vec<HandlerId> = Vec::new();
